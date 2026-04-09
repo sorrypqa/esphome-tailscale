@@ -2,6 +2,9 @@ tailscale:
   auth_key: ${var_tailscale_auth_key}
   hostname: ${var_tailscale_hostname}
 
+wifi:
+  use_address: ${var_tailscale_ip}
+
 binary_sensor:
   - platform: tailscale
     connected:
