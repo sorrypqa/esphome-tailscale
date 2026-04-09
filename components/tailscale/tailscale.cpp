@@ -25,7 +25,11 @@ void TailscaleComponent::start_microlink_() {
   config.enable_disco = this->enable_disco_;
   config.max_peers = this->max_peers_;
 
+  ESP_LOGI(TAG, "Calling microlink_init with auth_key=%s device=%s",
+    config.auth_key ? config.auth_key : "NULL",
+    config.device_name ? config.device_name : "NULL");
   this->ml_ = microlink_init(&config);
+  ESP_LOGI(TAG, "microlink_init returned: %p", (void*)this->ml_);
   if (this->ml_ == nullptr) {
     ESP_LOGE(TAG, "Failed to initialize MicroLink!");
     this->mark_failed();

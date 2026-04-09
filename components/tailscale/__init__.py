@@ -4,9 +4,10 @@ import esphome.config_validation as cv
 from esphome.const import (
     CONF_ID,
 )
+from esphome.components.esp32 import add_idf_sdkconfig_option
 
 CODEOWNERS = ["@esphome-tailscale"]
-DEPENDENCIES = ["wifi"]
+DEPENDENCIES = ["wifi", "esp32"]
 AUTO_LOAD = ["binary_sensor", "text_sensor", "sensor"]
 
 CONF_AUTH_KEY = "auth_key"
@@ -57,5 +58,36 @@ async def to_code(config):
         project_root, "microlink", "components", "microlink", "components"
     ).replace("\\", "/")
 
-    # NOTE: microlink ESP-IDF components are added via platformio_options
-    # in the YAML config (extra_scripts pointing to patch_cmake.py)
+    # Required ESP-IDF sdkconfig for Tailscale/WireGuard
+    # PSRAM: microlink needs large PSRAM buffers for HTTP/2 and JSON
+    add_idf_sdkconfig_option("CONFIG_SPIRAM", True)
+    # lwIP: IP forwarding between WiFi and WG netif, IPv6 for STUN/DERP
+    add_idf_sdkconfig_option("CONFIG_LWIP_IP_FORWARD", True)
+    add_idf_sdkconfig_option("CONFIG_LWIP_IPV6", True)
+    add_idf_sdkconfig_option("CONFIG_LWIP_CHECK_THREAD_SAFETY", False)
+    # mbedTLS: WireGuard crypto (ChaCha20-Poly1305) + Tailscale control plane TLS
+    add_idf_sdkconfig_option("CONFIG_MBEDTLS_CERTIFICATE_BUNDLE", True)
+    add_idf_sdkconfig_option("CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL", True)
+    add_idf_sdkconfig_option("CONFIG_MBEDTLS_CHACHAPOLY_C", True)
+    add_idf_sdkconfig_option("CONFIG_MBEDTLS_CHACHA20_C", True)
+    add_idf_sdkconfig_option("CONFIG_MBEDTLS_POLY1305_C", True)
+    add_idf_sdkconfig_option("CONFIG_MBEDTLS_HKDF_C", True)
+
+    # Add microlink include paths and config override header
+    ml_include = os.path.join(project_root, "microlink", "components", "microlink", "include").replace("\\", "/")
+    ml_src = os.path.join(project_root, "microlink", "components", "microlink", "src").replace("\\", "/")
+    override_h = os.path.join(idf_components, "microlink", "ml_config_override.h").replace("\\", "/")
+    cg.add_build_flag(f"-I{ml_include}")
+    cg.add_build_flag(f"-I{ml_src}")
+    cg.add_build_flag(f"-include {override_h}")
+
+    # Copy patch_cmake.py to the build directory so extra_scripts can find it
+    import shutil
+    import esphome.core as core
+
+    build_dir = core.CORE.relative_build_path("")
+    patch_src = os.path.join(this_dir, "patch_cmake.py")
+    patch_dst = os.path.join(build_dir, "patch_cmake.py")
+    os.makedirs(build_dir, exist_ok=True)
+    shutil.copy2(patch_src, patch_dst)
+    cg.add_platformio_option("extra_scripts", ["pre:patch_cmake.py"])
