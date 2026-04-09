@@ -13,12 +13,7 @@
 #include "esphome/components/sensor/sensor.h"
 #endif
 
-// Use stub when microlink library is not available
-#if __has_include("microlink.h")
 #include "microlink.h"
-#else
-#include "microlink_stub.h"
-#endif
 
 namespace esphome {
 namespace tailscale {
@@ -70,6 +65,7 @@ class TailscaleComponent : public PollingComponent {
   static void peer_callback(microlink_t *ml, const microlink_peer_info_t *peer, void *user_data);
 
   void publish_state_();
+  void start_microlink_();
 
   // Config
   std::string auth_key_;

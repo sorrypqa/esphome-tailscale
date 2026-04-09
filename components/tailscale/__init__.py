@@ -1,3 +1,4 @@
+import os
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.const import (
@@ -46,3 +47,15 @@ async def to_code(config):
 
     if config[CONF_LOGIN_SERVER]:
         cg.add(var.set_login_server(config[CONF_LOGIN_SERVER]))
+
+    # Add microlink ESP-IDF components to the build
+    # Find the project root (where microlink submodule lives)
+    this_dir = os.path.dirname(__file__)
+    project_root = os.path.abspath(os.path.join(this_dir, "..", ".."))
+    idf_components = os.path.join(project_root, "idf_components").replace("\\", "/")
+    wg_components = os.path.join(
+        project_root, "microlink", "components", "microlink", "components"
+    ).replace("\\", "/")
+
+    # NOTE: microlink ESP-IDF components are added via platformio_options
+    # in the YAML config (extra_scripts pointing to patch_cmake.py)

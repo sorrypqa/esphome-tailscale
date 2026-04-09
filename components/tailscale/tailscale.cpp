@@ -1,6 +1,7 @@
 #include "tailscale.h"
 #include "esphome/core/log.h"
 #include "esphome/core/application.h"
+#include "esphome/components/wifi/wifi_component.h"
 
 namespace esphome {
 namespace tailscale {
@@ -9,6 +10,12 @@ static const char *const TAG = "tailscale";
 
 void TailscaleComponent::setup() {
   ESP_LOGI(TAG, "Initializing Tailscale (MicroLink)...");
+  ESP_LOGI(TAG, "Waiting for WiFi before starting...");
+}
+
+void TailscaleComponent::start_microlink_() {
+  if (this->ml_ != nullptr)
+    return;  // Already started
 
   microlink_config_t config = {};
   config.auth_key = this->auth_key_.c_str();
@@ -35,10 +42,15 @@ void TailscaleComponent::setup() {
     return;
   }
 
-  ESP_LOGI(TAG, "Tailscale started, waiting for connection...");
+  ESP_LOGI(TAG, "Tailscale started after WiFi connected!");
 }
 
 void TailscaleComponent::loop() {
+  // Start microlink only after WiFi is connected
+  if (this->ml_ == nullptr && wifi::global_wifi_component->is_connected()) {
+    this->start_microlink_();
+  }
+
   if (this->state_changed_) {
     this->state_changed_ = false;
     this->publish_state_();
