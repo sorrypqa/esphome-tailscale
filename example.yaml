@@ -6,6 +6,7 @@ esphome:
       - pre:C:/devuser2/esphome_tailscale/components/tailscale/patch_cmake.py
     build_flags:
       - "-include C:/devuser2/esphome_tailscale/idf_components/microlink/ml_config_override.h"
+      - "-DWG_DEBUG_LOGGING=1"
 
 esp32:
   board: esp32-s3-devkitc-1

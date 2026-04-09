@@ -10,9 +10,6 @@ project_dir = env.subst("$PROJECT_DIR")
 # The project root is 3 levels up from .esphome/build/esp32-tailscale
 project_root = os.path.abspath(os.path.join(project_dir, "..", "..", ".."))
 idf_components = os.path.join(project_root, "idf_components").replace("\\", "/")
-wg_components = os.path.join(
-    project_root, "microlink", "components", "microlink", "components"
-).replace("\\", "/")
 
 cmake_file = os.path.join(project_dir, "CMakeLists.txt")
 print(f"*** patch_cmake: root={project_root} cmake={cmake_file} exists={os.path.exists(cmake_file)}")
@@ -26,7 +23,7 @@ else:
 if idf_components not in content:
     patched = content.replace(
         "include($ENV{IDF_PATH}/tools/cmake/project.cmake)",
-        'set(EXTRA_COMPONENT_DIRS "${EXTRA_COMPONENT_DIRS}" "' + idf_components + '" "' + wg_components + '")\n'
+        'set(EXTRA_COMPONENT_DIRS "${EXTRA_COMPONENT_DIRS}" "' + idf_components + '")\n'
         "include($ENV{IDF_PATH}/tools/cmake/project.cmake)",
     )
     open(cmake_file, "w").write(patched)
