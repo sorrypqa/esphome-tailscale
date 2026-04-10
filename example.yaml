@@ -9,9 +9,15 @@ esp32:
 
 # Pull the tailscale component + all entities from the GitHub package.
 # This is exactly what an end user would do — guarantees the build output
-# matches what users get when they include the package.
+# matches what users get when they include the package. `refresh: 0s`
+# disables the default 1-day cache so dev flashes always see the latest main.
 packages:
-  tailscale: github://Csontikka/esphome-tailscale/packages/tailscale/tailscale.yaml@main
+  tailscale:
+    url: https://github.com/Csontikka/esphome-tailscale
+    ref: main
+    refresh: 0s
+    files:
+      - packages/tailscale/tailscale.yaml
 
 tailscale:
   auth_key: !secret tailscale_auth_key

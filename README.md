@@ -245,7 +245,7 @@ Re-flash once more (still USB if the device is in front of you; from here on OTA
 
 ### 5. Disable key expiry on the new node
 
-By default Tailscale expires every node key after 90 days (or whatever cap your tailnet has). For an unattended ESP, you want the node key to be **permanent**.
+By default Tailscale expires every node key after **180 days** (the tailnet-wide default; an admin can shorten it to anywhere between 1 and 180 days in **Settings → Device management → Device approval**). For an unattended ESP, you want the node key to be **permanent** — which is a per-device flag, not a tailnet setting.
 
 1. Open the [Tailscale Machines page](https://login.tailscale.com/admin/machines).
 2. Find the new `esp32-tailscale` entry.
