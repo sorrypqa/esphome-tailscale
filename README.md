@@ -3,9 +3,6 @@
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/Csontikka/esphome-tailscale?style=plastic)
 [![ESPHome External Component](https://img.shields.io/badge/ESPHome-external%20component-black?style=plastic&logo=esphome&logoColor=white)](https://esphome.io/components/external_components.html)
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg?style=plastic)](https://github.com/Csontikka/esphome-tailscale/blob/main/LICENSE)
-[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=Csontikka_esphome-tailscale&metric=security_rating&token=b9276937a0e841a6159707252afad21731b3e62f)](https://sonarcloud.io/summary/new_code?id=Csontikka_esphome-tailscale)
-[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=Csontikka_esphome-tailscale&metric=reliability_rating&token=b9276937a0e841a6159707252afad21731b3e62f)](https://sonarcloud.io/summary/new_code?id=Csontikka_esphome-tailscale)
-[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=Csontikka_esphome-tailscale&metric=sqale_rating&token=b9276937a0e841a6159707252afad21731b3e62f)](https://sonarcloud.io/summary/new_code?id=Csontikka_esphome-tailscale)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-donate-yellow.svg?style=plastic)](https://buymeacoffee.com/csontikka)
 
 > [!WARNING]
@@ -671,8 +668,7 @@ esphome-tailscale/
 │   ├── workflows/
 │   │   ├── validate.yml               # ESPHome config validation CI
 │   │   ├── check-microlink-update.yml # Alerts when the vendored microlink has a new upstream release
-│   │   ├── codeql.yml                 # GitHub CodeQL static analysis
-│   │   └── sonarcloud.yml             # SonarCloud code quality scan
+│   │   └── codeql.yml                 # GitHub CodeQL static analysis
 │   └── dependabot.yml                 # Automated dependency update config
 ├── scripts/
 │   ├── capture_web_esphome.py  # Screenshot capture helper for ESPHome web UI
@@ -681,7 +677,6 @@ esphome-tailscale/
 ├── microlink/                 # Vendored copy of the Tailscale protocol implementation
 ├── example.yaml               # End-user reference config that uses the GitHub package
 ├── example-dev.yaml           # Development config using the local checkout and inline entities
-├── sonar-project.properties   # SonarCloud project configuration
 ├── SECURITY.md                # Security policy and vulnerability reporting
 ├── LICENSE                    # MIT License
 ├── .gitignore                 # Git ignore rules
