@@ -456,22 +456,6 @@ action:
         Open the Tailscale admin console and click "Disable key expiry".
 ```
 
-### Automation: alert on disconnect
-
-```yaml
-alias: Tailscale disconnect
-trigger:
-  - platform: state
-    entity_id: binary_sensor.esp32_tailscale_tailscale_connected
-    to: "off"
-    for: "00:05:00"
-action:
-  - service: notify.mobile_app_phone
-    data:
-      title: "ESP offline"
-      message: "ESP32 has been disconnected from Tailscale for 5 minutes."
-```
-
 ---
 
 ## Troubleshooting
@@ -647,14 +631,6 @@ This component is **just the glue** between ESPHome and a third-party Tailscale 
 
 ---
 
-## Support
-
-Found a bug or have an idea? [Open an issue](https://github.com/Csontikka/esphome-tailscale/issues) — feedback and feature requests are welcome!
-
-If you find this component useful, consider [buying me a coffee](https://buymeacoffee.com/csontikka) ☕
-
----
-
 ## License
 
 This project (the ESPHome wrapper — everything under `components/`, `packages/`, `example.yaml`, `README.md`, etc.) is released under the **MIT License**. See [`LICENSE`](LICENSE) for the full text and the list of third-party notices.
@@ -670,3 +646,11 @@ Bundled / required components keep their own licenses:
 See [`microlink/LICENSE`](microlink/LICENSE) and [`microlink/x25519-license.txt`](microlink/x25519-license.txt) for the full upstream texts.
 
 **DISCLAIMER:** This is an independent community effort for educational and interoperability purposes. The authors make no guarantees about security, correctness, stability, or compatibility with official Tailscale software. **Use at your own risk.**
+
+---
+
+## Support
+
+Found a bug or have an idea? [Open an issue](https://github.com/Csontikka/esphome-tailscale/issues) — feedback and feature requests are welcome!
+
+If you find this component useful, consider [buying me a coffee](https://buymeacoffee.com/csontikka) ☕
