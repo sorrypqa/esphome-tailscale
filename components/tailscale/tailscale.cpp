@@ -110,6 +110,43 @@ void TailscaleComponent::loop() {
     this->send_ip_notification_();
   }
 
+  // Periodic diagnostic logs every 10 minutes (hints, peer warnings, status summary)
+  if (this->ml_ != nullptr) {
+    constexpr uint32_t HINT_INTERVAL_MS = 600000;  // 10 minutes
+    uint32_t now_ms = millis();
+    if (now_ms - this->last_hint_ms_ >= HINT_INTERVAL_MS) {
+      this->last_hint_ms_ = now_ms;
+      if (!this->vpn_ip_str_.empty()) {
+        ESP_LOGI(TAG, "Hint: set 'wifi: use_address: \"%s\"' in your ESPHome YAML if device is not visible in Builder",
+                 this->vpn_ip_str_.c_str());
+      }
+      // Peer capacity warnings
+      int online = 0, direct = 0, relay = 0;
+      int total = this->get_peer_count();
+      for (int i = 0; i < total; i++) {
+        microlink_peer_info_t info;
+        if (microlink_get_peer_info(this->ml_, i, &info) == ESP_OK && info.online) {
+          online++;
+          if (info.direct_path) direct++; else relay++;
+        }
+      }
+      if (online >= this->max_peers_) {
+        ESP_LOGW(TAG, "Peer limit FULL: %d/%d online peers. Increase max_peers or remove unused peers from your tailnet.",
+                 online, (int)this->max_peers_);
+      } else if (online >= this->max_peers_ - 2) {
+        ESP_LOGW(TAG, "Peer limit WARNING: %d/%d online peers. Approaching max_peers limit.",
+                 online, (int)this->max_peers_);
+      }
+      // Periodic status summary
+      ESP_LOGI(TAG, "Status: %s | peers %d/%d (direct=%d relay=%d) | heap %uKB | PSRAM %uKB | uptime %us",
+               this->is_connected() ? "connected" : "disconnected",
+               online, (int)this->max_peers_, direct, relay,
+               (unsigned)(esp_get_free_heap_size() / 1024),
+               (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
+               (unsigned)(millis() / 1000));
+    }
+  }
+
   // Reconnect state machine
   if (this->reconnect_phase_ != RECONNECT_IDLE && this->ml_ != nullptr) {
     uint32_t elapsed = millis() - this->reconnect_start_ms_;
@@ -142,51 +179,6 @@ void TailscaleComponent::loop() {
         break;
     }
   }
-}
-
-void TailscaleComponent::update() {
-  if (this->ml_ == nullptr)
-    return;
-
-  // Force-publish all sensors on polling interval (for web_server SSE)
-  this->force_publish_ = true;
-
-  // Periodic log hints every 10 minutes, independent of update_interval.
-  constexpr uint32_t HINT_INTERVAL_MS = 600000;  // 10 minutes
-  uint32_t now_ms = millis();
-  if (now_ms - this->last_hint_ms_ >= HINT_INTERVAL_MS) {
-    this->last_hint_ms_ = now_ms;
-    if (!this->vpn_ip_str_.empty()) {
-      ESP_LOGI(TAG, "Hint: set 'wifi: use_address: \"%s\"' in your ESPHome YAML if device is not visible in Builder",
-               this->vpn_ip_str_.c_str());
-    }
-    // Peer capacity warnings
-    int online = 0, direct = 0, relay = 0;
-    int total = this->get_peer_count();
-    for (int i = 0; i < total; i++) {
-      microlink_peer_info_t info;
-      if (microlink_get_peer_info(this->ml_, i, &info) == ESP_OK && info.online) {
-        online++;
-        if (info.direct_path) direct++; else relay++;
-      }
-    }
-    if (online >= this->max_peers_) {
-      ESP_LOGW(TAG, "Peer limit FULL: %d/%d online peers. Increase max_peers or remove unused peers from your tailnet.",
-               online, (int)this->max_peers_);
-    } else if (online >= this->max_peers_ - 2) {
-      ESP_LOGW(TAG, "Peer limit WARNING: %d/%d online peers. Approaching max_peers limit.",
-               online, (int)this->max_peers_);
-    }
-    // Periodic status summary
-    ESP_LOGI(TAG, "Status: %s | peers %d/%d (direct=%d relay=%d) | heap %uKB | PSRAM %uKB | uptime %us",
-             this->is_connected() ? "connected" : "disconnected",
-             online, (int)this->max_peers_, direct, relay,
-             (unsigned)(esp_get_free_heap_size() / 1024),
-             (unsigned)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024),
-             (unsigned)(millis() / 1000));
-  }
-
-  this->publish_state_();
 }
 
 void TailscaleComponent::dump_config() {
@@ -266,21 +258,18 @@ void TailscaleComponent::peer_callback(microlink_t *ml, const microlink_peer_inf
 void TailscaleComponent::publish_state_() {
   bool connected = this->is_connected();
 
-  bool force = this->force_publish_;
-  this->force_publish_ = false;
-
 #ifdef USE_BINARY_SENSOR
-  if (this->connected_sensor_ != nullptr && (force || this->connected_sensor_->state != connected)) {
+  if (this->connected_sensor_ != nullptr && this->connected_sensor_->state != connected) {
     this->connected_sensor_->publish_state(connected);
   }
 #endif
 
 #ifdef USE_TEXT_SENSOR
   std::string vpn_ip = this->get_vpn_ip();
-  if (this->ip_address_sensor_ != nullptr && (force || this->ip_address_sensor_->state != vpn_ip)) {
+  if (this->ip_address_sensor_ != nullptr && this->ip_address_sensor_->state != vpn_ip) {
     this->ip_address_sensor_->publish_state(vpn_ip);
   }
-  if (this->hostname_sensor_ != nullptr && (force || this->hostname_sensor_->state != this->hostname_)) {
+  if (this->hostname_sensor_ != nullptr && this->hostname_sensor_->state != this->hostname_) {
     this->hostname_sensor_->publish_state(this->hostname_);
   }
   if (this->setup_status_sensor_ != nullptr) {
@@ -290,7 +279,7 @@ void TailscaleComponent::publish_state_() {
     } else {
       hint = "wifi use_address: " + vpn_ip;
     }
-    if (force || this->setup_status_sensor_->state != hint) {
+    if (this->setup_status_sensor_->state != hint) {
       this->setup_status_sensor_->publish_state(hint);
     }
   }
@@ -345,7 +334,7 @@ void TailscaleComponent::publish_state_() {
     bool key_problem = expiry_enabled;
 #ifdef USE_BINARY_SENSOR
     if (this->key_expiry_warning_sensor_ != nullptr &&
-        (force || this->key_expiry_warning_sensor_->state != key_problem)) {
+        this->key_expiry_warning_sensor_->state != key_problem) {
       this->key_expiry_warning_sensor_->publish_state(key_problem);
     }
 #endif
@@ -363,7 +352,7 @@ void TailscaleComponent::publish_state_() {
       key_expiry_iso = iso_buf;
     }
     if (this->key_expiry_sensor_ != nullptr &&
-        (force || this->key_expiry_sensor_->state != key_expiry_iso)) {
+        this->key_expiry_sensor_->state != key_expiry_iso) {
       this->key_expiry_sensor_->publish_state(key_expiry_iso);
     }
   }
@@ -371,11 +360,11 @@ void TailscaleComponent::publish_state_() {
     std::string ha_ip;
     std::string route = this->detect_ha_route_(&ha_ip);
     if (this->ha_route_sensor_ != nullptr &&
-        (force || this->ha_route_sensor_->state != route)) {
+        this->ha_route_sensor_->state != route) {
       this->ha_route_sensor_->publish_state(route);
     }
     if (this->ha_ip_sensor_ != nullptr &&
-        (force || this->ha_ip_sensor_->state != ha_ip)) {
+        this->ha_ip_sensor_->state != ha_ip) {
       this->ha_ip_sensor_->publish_state(ha_ip);
     }
   }
@@ -395,7 +384,7 @@ void TailscaleComponent::publish_state_() {
     }
   }
   if (this->tailnet_name_sensor_ != nullptr && !this->tailnet_name_.empty()) {
-    if (force || this->tailnet_name_sensor_->state != this->tailnet_name_) {
+    if (this->tailnet_name_sensor_->state != this->tailnet_name_) {
       this->tailnet_name_sensor_->publish_state(this->tailnet_name_);
     }
   }
@@ -421,11 +410,11 @@ void TailscaleComponent::publish_state_() {
         list += entry;
       }
     }
-    if (force || this->peer_list_sensor_->state != list) {
+    if (this->peer_list_sensor_->state != list) {
       this->peer_list_sensor_->publish_state(list);
     }
   }
-  if (this->memory_mode_sensor_ != nullptr && (force || this->memory_mode_sensor_->state.empty())) {
+  if (this->memory_mode_sensor_ != nullptr && this->memory_mode_sensor_->state.empty()) {
     // Memory mode never changes - publish once
     size_t psram = esp_psram_get_size();
     if (psram > 0) {
@@ -452,8 +441,8 @@ void TailscaleComponent::publish_state_() {
     }
   }
 
-  auto pub_sensor = [force](sensor::Sensor *s, float val) {
-    if (s != nullptr && (force || s->state != val)) s->publish_state(val);
+  auto pub_sensor = [](sensor::Sensor *s, float val) {
+    if (s != nullptr && s->state != val) s->publish_state(val);
   };
   pub_sensor(this->peers_total_sensor_, static_cast<float>(total));
   pub_sensor(this->peers_online_sensor_, static_cast<float>(online));
@@ -465,7 +454,7 @@ void TailscaleComponent::publish_state_() {
     if (this->connected_since_ms_ > 0) {
       uptime_s = static_cast<float>((millis() - this->connected_since_ms_) / 1000);
     }
-    if (force || this->uptime_sensor_->state != uptime_s) {
+    if (this->uptime_sensor_->state != uptime_s) {
       this->uptime_sensor_->publish_state(uptime_s);
     }
   }
@@ -481,7 +470,7 @@ void TailscaleComponent::publish_state_() {
     } else {
       status = "OK";
     }
-    if (force || this->peer_status_sensor_->state != status) {
+    if (this->peer_status_sensor_->state != status) {
       this->peer_status_sensor_->publish_state(status);
     }
   }

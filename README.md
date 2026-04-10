@@ -334,7 +334,6 @@ tailscale:
   auth_key: !secret tailscale_auth_key   # required
   hostname: "esp32-tailscale"            # optional, default empty → control plane auto-assigns
   max_peers: 16                          # optional, default 16, range 1–64
-  update_interval: 30s                   # optional, how often to refresh sensor state
 ```
 
 | Option | Default | Description |
@@ -342,7 +341,8 @@ tailscale:
 | `auth_key` | *(required)* | Tailscale auth key (`tskey-auth-...`). Use `!secret`. |
 | `hostname` | `""` | Name the node registers as. Empty → Tailscale picks one. |
 | `max_peers` | `16` | Maximum number of peers to track. Raise if your tailnet has more than 16 nodes *and* you have PSRAM. |
-| `update_interval` | `30s` | How often sensor states are re-published. Does **not** affect the tunnel itself. |
+
+> **No `update_interval`.** The component is fully event-driven: sensors publish only when the underlying state actually changes. There is no polling loop to tune — and nothing to reduce CPU/network cost by raising.
 
 > **What about STUN / DISCO?** The Tailscale stack always runs **STUN** (to discover how your NAT maps outbound UDP) and **DISCO** (Tailscale's peer discovery / path-probing protocol) — they're essential for getting direct peer-to-peer connections. They can't be turned off in this component because microlink runs them unconditionally; they have no config knob.
 

@@ -17,7 +17,7 @@ CONF_HOSTNAME = "hostname"
 CONF_MAX_PEERS = "max_peers"
 CONF_LOGIN_SERVER = "login_server"
 tailscale_ns = cg.esphome_ns.namespace("tailscale")
-TailscaleComponent = tailscale_ns.class_("TailscaleComponent", cg.PollingComponent)
+TailscaleComponent = tailscale_ns.class_("TailscaleComponent", cg.Component)
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -27,7 +27,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional(CONF_MAX_PEERS, default=16): cv.int_range(min=1, max=64),
         cv.Optional(CONF_LOGIN_SERVER, default=""): cv.string,
     }
-).extend(cv.polling_component_schema("30s"))
+)
 
 
 async def to_code(config):

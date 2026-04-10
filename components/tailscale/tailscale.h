@@ -26,11 +26,10 @@
 namespace esphome {
 namespace tailscale {
 
-class TailscaleComponent : public PollingComponent {
+class TailscaleComponent : public Component {
  public:
   void setup() override;
   void loop() override;
-  void update() override;
   void dump_config() override;
   void on_shutdown() override;
   float get_setup_priority() const override { return setup_priority::AFTER_WIFI; }
@@ -126,7 +125,6 @@ class TailscaleComponent : public PollingComponent {
   std::atomic<bool> state_changed_{false};
   bool psram_available_{false};
   bool ip_notify_pending_{false};
-  bool force_publish_{true};
   uint32_t last_hint_ms_{0};
   std::string vpn_ip_str_;
   std::string tailnet_name_;
