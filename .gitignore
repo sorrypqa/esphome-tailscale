@@ -1,5 +1,6 @@
 secrets.yaml
 .esphome/
+.esphome-run.log
 .deploy_key
 .deploy_key.pub
 __pycache__/
