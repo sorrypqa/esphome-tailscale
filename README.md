@@ -635,19 +635,17 @@ cd esphome-tailscale
 
 The `microlink/` directory is vendored directly into the repository, so no `git submodule` step is needed.
 
-Then point an ESPHome YAML at your local checkout instead of the package:
+The repository ships two example configurations at the root:
 
-```yaml
-external_components:
-  - source: components
-```
+| File | Purpose |
+|------|---------|
+| [`example.yaml`](example.yaml) | End-user style. Pulls the component and entities from the GitHub `packages:` source — exactly what someone installing this would write. |
+| [`example-dev.yaml`](example-dev.yaml) | Development style. Uses `external_components: - source: components` so every compile picks up the working-tree copy of the code, with the entity definitions inlined. This is the file to use when editing `components/tailscale/`. |
 
-(This is what `example.yaml` in the repo does.)
-
-Build and flash:
+Build and flash the dev example:
 
 ```bash
-esphome run example.yaml --device COM3
+esphome run example-dev.yaml --device COM3
 ```
 
 The `components/tailscale/` directory is the external component proper; `microlink/` is a vendored copy of [CamM2325/microlink](https://github.com/CamM2325/microlink) (via the [Csontikka/microlink](https://github.com/Csontikka/microlink) fork) which provides the Tailscale protocol stack. It is checked in directly rather than pulled as a submodule, so a fresh clone is ready to build with no extra steps.
@@ -681,7 +679,8 @@ esphome-tailscale/
 │   ├── mask_screenshots.py     # Redacts sensitive info from screenshots
 │   └── svg_to_png.py           # Converts SVG diagrams to PNG for the docs
 ├── microlink/                 # Vendored copy of the Tailscale protocol implementation
-├── example.yaml               # Reference config that uses the GitHub package
+├── example.yaml               # End-user reference config that uses the GitHub package
+├── example-dev.yaml           # Development config using the local checkout and inline entities
 ├── sonar-project.properties   # SonarCloud project configuration
 ├── SECURITY.md                # Security policy and vulnerability reporting
 ├── LICENSE                    # MIT License
