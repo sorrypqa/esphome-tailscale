@@ -538,7 +538,7 @@ When loading the component via `packages:` from a GitHub source, ESPHome caches 
 
 Three ways around it:
 
-- Add `refresh: 0s` to the `packages:` block, which disables caching and refetches on every compile.
+- Add `refresh: always` to the `packages:` block (equivalent to `refresh: 0s`), which bypasses the 24-hour cache and refetches on every compile.
 - Click **Clean All Files** in the ESPHome Dashboard top bar — this wipes cached build artifacts and external packages for every configuration, straight from the web UI.
 - Delete `.esphome/external_components/` and `.esphome/packages/` manually between compiles.
 
