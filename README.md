@@ -578,8 +578,25 @@ esphome-tailscale/
 │   └── tailscale.cpp          # C++ component implementation
 ├── packages/tailscale/
 │   └── tailscale.yaml         # The end-user package (external_components + all entities)
+├── docs/
+│   └── images/                # Screenshots and diagrams used in the README
+├── .github/
+│   ├── workflows/
+│   │   ├── validate.yml               # ESPHome config validation CI
+│   │   ├── check-microlink-update.yml # Alerts when the microlink submodule has a new upstream release
+│   │   ├── codeql.yml                 # GitHub CodeQL static analysis
+│   │   └── sonarcloud.yml             # SonarCloud code quality scan
+│   └── dependabot.yml                 # Automated dependency update config
+├── scripts/
+│   ├── capture_web_esphome.py  # Screenshot capture helper for ESPHome web UI
+│   ├── mask_screenshots.py     # Redacts sensitive info from screenshots
+│   └── svg_to_png.py           # Converts SVG diagrams to PNG for the docs
 ├── microlink/                 # Git submodule: the Tailscale protocol implementation
 ├── example.yaml               # Reference config that uses the GitHub package
+├── sonar-project.properties   # SonarCloud project configuration
+├── SECURITY.md                # Security policy and vulnerability reporting
+├── LICENSE                    # MIT License
+├── .gitignore                 # Git ignore rules
 └── README.md                  # This file
 ```
 
