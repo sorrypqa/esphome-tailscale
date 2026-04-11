@@ -13,6 +13,7 @@
 #include "lwip/tcp.h"
 #include "lwip/priv/tcp_priv.h"
 #include "lwip/ip_addr.h"
+#include "lwip/tcpip.h"
 
 namespace esphome {
 namespace tailscale {
@@ -556,45 +557,57 @@ std::string TailscaleComponent::detect_ha_route_(std::string *out_ip) {
     return "Unknown";
   }
   uint16_t api_port = api::global_api_server->get_port();
-  // Iterate lwIP active TCP pcbs to find the API client connection.
-  // Last-wins on multi-HA: we take the first ESTABLISHED pcb on api_port we see.
-  // Note: We skip LOCK_TCPIP_CORE() here — it's not exported by ESP-IDF's lwipopts.
-  // Read-only pcb list traversal is safe enough for diagnostics; worst case is a
-  // stale snapshot, not a crash.
-  // Iterate ALL matching pcbs — multiple clients may connect (HA Core, ESPHome Builder,
-  // mobile app, etc). Strategy: prefer Tailscale-range pcb for the Route value; dump the
-  // full comma-separated IP list into out_ip so the user can debug what's connected.
+  // Snapshot active TCP pcbs into a small local array under LOCK_TCPIP_CORE —
+  // tcp_active_pcbs is mutated by tcpip_thread, so walking it from loopTask
+  // without the core lock races with the stack and has caused
+  // `sys_mutex_unlock: failed to give the mutex` asserts in netconn writes
+  // (heap/pcb corruption making a later lwip_write land on a stale mutex).
+  struct pcb_snapshot {
+    uint8_t b0, b1, b2, b3;
+  };
+  constexpr size_t kMaxSnap = 8;
+  pcb_snapshot snap[kMaxSnap];
+  size_t snap_n = 0;
+  LOCK_TCPIP_CORE();
+  for (struct tcp_pcb *pcb = tcp_active_pcbs; pcb != nullptr && snap_n < kMaxSnap;
+       pcb = pcb->next) {
+    if (pcb->local_port != api_port) continue;
+    if (pcb->state != ESTABLISHED) continue;
+    if (!IP_IS_V4_VAL(pcb->remote_ip)) continue;
+    uint32_t remote = ip_addr_get_ip4_u32(&pcb->remote_ip);  // network order
+    snap[snap_n++] = {
+        (uint8_t)(remote & 0xFF),
+        (uint8_t)((remote >> 8) & 0xFF),
+        (uint8_t)((remote >> 16) & 0xFF),
+        (uint8_t)((remote >> 24) & 0xFF),
+    };
+  }
+  UNLOCK_TCPIP_CORE();
+
+  // Classify + look up peers OUTSIDE the core lock — microlink_get_peer_info
+  // is not bounded-latency and must not be called while holding tcpip.
   std::string route = "Unknown";
   std::string all_ips;
   bool ts_pcb_found = false;
   std::string ts_route;
   std::string nonts_route;
-  for (struct tcp_pcb *pcb = tcp_active_pcbs; pcb != nullptr; pcb = pcb->next) {
-    if (pcb->local_port != api_port) continue;
-    if (pcb->state != ESTABLISHED) continue;
-    if (!IP_IS_V4_VAL(pcb->remote_ip)) continue;
-    uint32_t remote = ip_addr_get_ip4_u32(&pcb->remote_ip);  // network order
-    uint8_t b0 = remote & 0xFF;
-    uint8_t b1 = (remote >> 8) & 0xFF;
-    uint8_t b2 = (remote >> 16) & 0xFF;
-    uint8_t b3 = (remote >> 24) & 0xFF;
-    // microlink vpn_ip is host-order with first octet in MSB: (b0<<24)|(b1<<16)|(b2<<8)|b3
+  for (size_t i = 0; i < snap_n; ++i) {
+    uint8_t b0 = snap[i].b0, b1 = snap[i].b1, b2 = snap[i].b2, b3 = snap[i].b3;
     uint32_t ml_ip = ((uint32_t)b0 << 24) | ((uint32_t)b1 << 16) |
                      ((uint32_t)b2 << 8) | (uint32_t)b3;
     char ip_buf[16];
     snprintf(ip_buf, sizeof(ip_buf), "%u.%u.%u.%u", b0, b1, b2, b3);
     if (!all_ips.empty()) all_ips += ", ";
     all_ips += ip_buf;
-    // Tailscale CGNAT range: 100.64.0.0/10
     bool in_tailscale = (b0 == 100) && (b1 >= 64) && (b1 <= 127);
     if (in_tailscale) {
       ts_pcb_found = true;
       if (this->ml_ != nullptr) {
         int count = microlink_get_peer_count(this->ml_);
         bool found = false;
-        for (int i = 0; i < count; i++) {
+        for (int pi = 0; pi < count; pi++) {
           microlink_peer_info_t info;
-          if (microlink_get_peer_info(this->ml_, i, &info) == ESP_OK) {
+          if (microlink_get_peer_info(this->ml_, pi, &info) == ESP_OK) {
             if (info.vpn_ip == ml_ip) {
               ts_route = info.direct_path ? "Tailscale Direct" : "Tailscale DERP";
               found = true;

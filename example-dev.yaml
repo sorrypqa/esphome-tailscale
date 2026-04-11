@@ -6,6 +6,35 @@ esp32:
   board: esp32-s3-devkitc-1
   framework:
     type: esp-idf
+    sdkconfig_options:
+      # Unblock microlink's ESP_LOGI so [DIAG] INFO logs compile in.
+      # ESPHome defaults CONFIG_LOG_MAXIMUM_LEVEL to 1 (ERROR) — that no-ops
+      # every non-error log in ESP-IDF components at compile time.
+      CONFIG_LOG_DEFAULT_LEVEL_ERROR: n
+      CONFIG_LOG_DEFAULT_LEVEL_INFO: y
+      CONFIG_LOG_MAXIMUM_LEVEL_INFO: y
+      # lwip tcpip_thread stack: ESP-IDF default 3072 is the documented minimum
+      # and per Espressif's own lwip guide can overflow when callbacks log
+      # verbosely ("esp_netif API calls can end up a few calls deep and
+      # logging there can trigger a stack overflow"). Overflow silently
+      # corrupts adjacent heap objects — including `lock_tcpip_core` (a
+      # FreeRTOS mutex handle), which then makes every subsequent
+      # xSemaphoreGive() return pdFALSE and trip
+      # `sys_mutex_unlock: failed to give the mutex` on loopTask's next
+      # lwip_write. Raise to 6144 for headroom under API log streaming.
+      CONFIG_LWIP_TCPIP_TASK_STACK_SIZE: "6144"
+      # Enable runtime core-lock ownership checks — LWIP_ASSERT_CORE_LOCKED()
+      # guards throughout lwip fire earlier and with a clearer message if a
+      # LOCK/UNLOCK ownership violation ever resurfaces.
+      CONFIG_LWIP_CHECK_THREAD_SAFETY: y
+      # Disable LWIP_TCPIP_CORE_LOCKING: with locking enabled, lwip_netconn_do_write
+      # runs an UNLOCK/sem_wait/LOCK partial-write dance (api_msg.c:1913-1919) that
+      # races with sent_tcp → do_writemore on tcpip_thread. When loopTask gets
+      # preempted holding the core lock (e.g. during logger UART blocking), this
+      # race fires an `offset < len` assert at api_msg.c:1738 and/or
+      # `sys_mutex_unlock: failed to give the mutex` crash. Switching to the
+      # mbox-based api path removes the race entirely.
+      CONFIG_LWIP_TCPIP_CORE_LOCKING: n
 
 # Load the tailscale component from your local checkout instead of GitHub.
 # Every compile uses the current working-tree copy of components/tailscale,
@@ -82,8 +111,7 @@ tailscale:
   auth_key: !secret tailscale_auth_key
   hostname: "esp32-tailscale-dev"
   # max_peers: 16  # Optional, default 16
-  # login_server: "http://192.168.1.42:8080"  # Optional, for Headscale / self-hosted control plane
-  #                                           # See contrib/headscale-test/ for a local docker-compose
+  # login_server: "http://172.21.52.102:8080"  # Headscale dev LXC (Proxmox CT 118)
 
 wifi:
   ssid: !secret wifi_ssid
@@ -91,13 +119,35 @@ wifi:
   # use_address: "100.x.x.x"  # Set to your Tailscale VPN IP after first boot
 
 logger:
-  level: DEBUG
+  level: INFO
+  # Raised from default 115200 to 921600: at 115200 baud (~11.5 KB/s),
+  # the microlink DIAG logs saturate the UART TX FIFO; since ESPHome's
+  # write_msg_ calls uart_write_bytes on a driver installed with
+  # tx_buffer_size=0, it blocks on the hardware FIFO semaphore. Under
+  # the resulting loopTask stall, task_wdt fires and/or lwip core-lock
+  # invariants break. 921600 baud = 8x throughput, enough headroom to
+  # keep the logger non-blocking even during peer-setup log bursts.
+  baud_rate: 921600
   hardware_uart: UART0
+  logs:
+    ml_coord: INFO
+    ml_noise: INFO
+    ml_h2: INFO
+    ml_net_io: INFO
+    microlink: INFO
+    ml_peer_nvs: INFO
+    ml_wg_mgr: INFO
 
 api:
 
-web_server:
-  port: 80
+# web_server: DISABLED. Separate bug: with web_server enabled, an ESP-IDF log
+# call from ml_derp_tx_task routes through esphome::logger::TaskLogBuffer::
+# send_message_thread_safe → xRingbufferSendComplete and asserts in
+# prvSendItemDoneNoSplit (ringbuf.c:367, rbITEM_WRITTEN flag already set) at
+# ~50s uptime. Not a cascade of the UART fix — 179s stability verified clean
+# without web_server. Tracked separately from the logger stability work.
+# web_server:
+#   port: 80
 
 ota:
   platform: esphome

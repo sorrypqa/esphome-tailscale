@@ -136,6 +136,54 @@ new empty `[Unreleased]` section added above it.
 
 ### Fixed
 
+- **~40 s boot-time crash storm resolved.** Under stock settings the
+  device would reliably reboot between ~35-45 s uptime with one of
+  three symptoms: `task_wdt: loopTask (CPU 1)` watchdog reset,
+  `sys_mutex_unlock: failed to give the mutex sys_arch.c:79` from the
+  Logger → API log-forward path, or
+  `assert failed: lwip_netconn_do_writemore api_msg.c:1738 (offset <
+  len)` from `sent_tcp` on the tcpip_thread. Root cause: ESPHome's
+  logger calls `uart_write_bytes` on the ESP-IDF UART driver, which
+  is installed with `tx_buffer_size=0` and therefore blocks the
+  calling task on the hardware-FIFO semaphore whenever the FIFO is
+  full. At the default 115 200 baud (~11.5 KB/s) the microlink
+  INFO-level log bursts around peer setup / initial MapResponse
+  saturate the FIFO, `loopTask` stalls inside `uart_write_bytes`
+  for multiple seconds, and the watchdog fires. With
+  `LWIP_TCPIP_CORE_LOCKING=y` the stalled `loopTask` was also
+  holding the lwIP core lock during the stall, which in turn
+  exposed a latent race between `lwip_netconn_do_write`'s
+  partial-write UNLOCK/sem_wait/LOCK dance (api_msg.c:1913-1919)
+  and the `sent_tcp` callback re-entering `do_writemore` on
+  tcpip_thread — the `api_msg.c:1738` assert and the stray mutex
+  give failures. The fix has four parts, all in `example-dev.yaml`
+  (and any user YAML targeting the same profile) plus one
+  microlink change:
+  - `logger: baud_rate: 921600` — eight times the throughput of
+    the 115 200 default so `uart_write_bytes` drains the FIFO fast
+    enough to never block under realistic log volume.
+  - `sdkconfig_options: CONFIG_LWIP_TCPIP_CORE_LOCKING: n` — switch
+    lwIP from core-locking to the mbox-based api message path so
+    the partial-write race window cannot re-appear even if
+    `loopTask` stalls briefly for any reason.
+  - `sdkconfig_options: CONFIG_LWIP_TCPIP_TASK_STACK_SIZE: "6144"`
+    — raise tcpip_thread's stack above the ESP-IDF default 3 072
+    so API log-streaming and WireGuard callbacks have headroom
+    and cannot silently corrupt adjacent heap objects.
+  - `ml_udp.c:201`: `ml_udp_rx` priority lowered from
+    `configMAX_PRIORITIES - 2` (23 on a stock build) to `5`. At
+    priority 23 pinned to CPU 1 the task could preempt ESPHome's
+    priority-1 `loopTask` on the same core; at priority 5 it
+    sits in the same tier as other microlink worker tasks and
+    can no longer starve the main loop. Not strictly required
+    after the baud-rate fix but removes an entire future
+    starvation class.
+  Verification: 179 s continuous INFO-level stability run against
+  the Tailscale SaaS control plane (`controlplane.tailscale.com`)
+  with full microlink WireGuard traffic — zero reboots, zero
+  asserts, zero `task_wdt` hits. The fix is on the logger UART
+  path so it is control-plane-independent; a Headscale endurance
+  re-run under the same profile is pending.
 - **lwIP thread safety** — replaced `ip_input` with `tcpip_input` in the
   WireGuard data path and added `LOCK_TCPIP_CORE` around netif
   operations, eliminating a class of crashes under traffic.
