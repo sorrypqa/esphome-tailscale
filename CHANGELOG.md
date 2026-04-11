@@ -184,6 +184,31 @@ new empty `[Unreleased]` section added above it.
   asserts, zero `task_wdt` hits. The fix is on the logger UART
   path so it is control-plane-independent; a Headscale endurance
   re-run under the same profile is pending.
+- **Bulk peer ingest no longer starves IDLE.** On first `MapResponse`
+  with ~14 peers, `process_peer_updates` used to drain the entire
+  queue in a tight loop. Each `ML_PEER_ADD` does a synchronous NVS
+  flash write (~200 ms with NVS cache disabled) plus WireGuard peer
+  setup plus a NaCl `box_beforenm` x25519 scalar-mult, so draining
+  14 peers back-to-back blocked the `ml_wg_mgr` task for ~3 s and
+  tripped `task_wdt` against the IDLE task on its core. Fix: the
+  dispatcher now processes **at most one `ML_PEER_ADD` per call**
+  and returns so the outer loop's `vTaskDelay(10)` yields. Cheap
+  ops (`REMOVE`, `UPDATE_ENDPOINT`) still drain fully per tick.
+- **`ml_wg_mgr` moved to CPU 0.** Previously pinned to CPU 1, which
+  is also where ESPHome's `loopTask` runs. The WireGuard handshake
+  init path calls `x25519` scalar-mult twice (~500 ms each on refc),
+  and peer init calls it once more; concentrating all of that on
+  CPU 1 starved `loopTask` long enough to trip `task_wdt` on the
+  initial MapResponse burst. Moving `ml_wg_mgr` to CPU 0 leaves
+  `loopTask` alone on CPU 1.
+- **DISCO ping/pong encryption cost reduced ~500 ms → sub-ms.**
+  `add_peer` now precomputes the per-peer NaCl `box_beforenm`
+  shared secret once at peer-add time and caches it on the peer
+  struct. Subsequent `disco_build_ping`, `disco_build_pong`,
+  `disco_send_call_me_maybe`, and `process_disco_packet` use
+  `box_afternm`/`box_open_afternm`, skipping the x25519 scalar
+  multiply on every DISCO packet. Large tailnets that used to
+  stutter during periodic DISCO pings now run smoothly.
 - **lwIP thread safety** — replaced `ip_input` with `tcpip_input` in the
   WireGuard data path and added `LOCK_TCPIP_CORE` around netif
   operations, eliminating a class of crashes under traffic.
