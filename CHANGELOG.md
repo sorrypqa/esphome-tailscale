@@ -184,6 +184,19 @@ new empty `[Unreleased]` section added above it.
   asserts, zero `task_wdt` hits. The fix is on the logger UART
   path so it is control-plane-independent; a Headscale endurance
   re-run under the same profile is pending.
+- **Headscale initial peer fetch works against non-streaming `serve()`.**
+  Headscale v0.28's non-streaming `serve()` path does not write a
+  `MapResponse` body for `OmitPeers=false`, so the old two-phase
+  `MapRequest` flow (a `Stream=false` peer fetch on stream 3 followed
+  by a `Stream=true` long-poll on stream 5) silently hung on stream 3
+  and never populated peers. `do_fetch_peers` now sends a single
+  `Stream=true` `MapRequest` on stream 5 and reads the initial
+  `MapResponse` as the first length-prefixed chunk of the long-poll
+  body. The parser was rewritten to use the deterministic 4-byte
+  little-endian length prefix instead of the old "scan the first few
+  bytes for `{`" heuristic, and to track `h2_parsed` incrementally
+  so each Noise frame is parsed once. `do_start_long_poll` is gone —
+  the single long-poll is the same connection the initial fetch used.
 - **Bulk peer ingest no longer starves IDLE.** On first `MapResponse`
   with ~14 peers, `process_peer_updates` used to drain the entire
   queue in a tight loop. Each `ML_PEER_ADD` does a synchronous NVS

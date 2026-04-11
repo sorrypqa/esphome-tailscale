@@ -39,7 +39,7 @@ database:
 
 log:
   format: text
-  level: info
+  level: debug
 
 dns:
   override_local_dns: false
