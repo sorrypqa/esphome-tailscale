@@ -136,6 +136,26 @@ new empty `[Unreleased]` section added above it.
 
 ### Fixed
 
+- **`web_server` + microlink ringbuf assert resolved.** Enabling
+  ESPHome's `web_server:` block would reliably crash the device at
+  ~50 s uptime with
+  `assert failed: prvSendItemDoneNoSplit ringbuf.c:367
+  ((pxCurHeader->uxItemFlags & rbITEM_WRITTEN) == 0)`, hit from
+  `xRingbufferSendComplete` → `TaskLogBuffer::send_message_thread_safe`
+  → `Logger::log_vprintf_non_main_thread_` → `esp_log_va` on the
+  `ml_derp_tx_task` path. Root cause: ESPHome's non-main-thread log
+  buffer (TaskLogBuffer) races between microlink's high-rate
+  `esp_log` calls from `ml_derp_tx_task` / `ml_wg_mgr` and the
+  `/events` SSE subscriber that `web_server` adds to the log
+  consumer list, corrupting the ringbuf item header. Workaround in
+  `example-dev.yaml`: `logger: task_log_buffer_size: 0` disables
+  TaskLogBuffer entirely so `esp_log` routes straight to UART. The
+  trade-off is that non-main-thread logs no longer reach the HA API
+  `/events` stream or the web_server `/events` stream — UART
+  (921 600 baud) remains the source of truth for microlink diagnostics.
+  Verified 372 s clean with full WireGuard traffic + `web_server: port: 80`
+  + 37 tailnet peers. The underlying TaskLogBuffer ringbuf race is an
+  ESPHome-core issue and deserves an upstream report separately.
 - **~40 s boot-time crash storm resolved.** Under stock settings the
   device would reliably reboot between ~35-45 s uptime with one of
   three symptoms: `task_wdt: loopTask (CPU 1)` watchdog reset,

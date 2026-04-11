@@ -128,6 +128,16 @@ logger:
   # invariants break. 921600 baud = 8x throughput, enough headroom to
   # keep the logger non-blocking even during peer-setup log bursts.
   baud_rate: 921600
+  # Required when web_server is enabled: ESPHome's non-main-thread log
+  # buffer (TaskLogBuffer) hits a `prvSendItemDoneNoSplit` ringbuf assert
+  # at ~50s uptime in `xRingbufferSendComplete` when microlink's high-rate
+  # esp_log calls from ml_derp_tx_task / ml_wg_mgr race with the web_server
+  # /events SSE log subscriber. Setting this to 0 disables TaskLogBuffer
+  # entirely (esp_log routes straight to UART) and eliminates the crash.
+  # Trade-off: non-main-thread logs don't reach the HA API / web_server
+  # /events streams — UART remains the source of truth for those logs.
+  # Verified 372s clean @ 2026-04-11 with full WG traffic + web_server :80.
+  task_log_buffer_size: 0
   hardware_uart: UART0
   logs:
     ml_coord: INFO
@@ -140,14 +150,9 @@ logger:
 
 api:
 
-# web_server: DISABLED. Separate bug: with web_server enabled, an ESP-IDF log
-# call from ml_derp_tx_task routes through esphome::logger::TaskLogBuffer::
-# send_message_thread_safe → xRingbufferSendComplete and asserts in
-# prvSendItemDoneNoSplit (ringbuf.c:367, rbITEM_WRITTEN flag already set) at
-# ~50s uptime. Not a cascade of the UART fix — 179s stability verified clean
-# without web_server. Tracked separately from the logger stability work.
-# web_server:
-#   port: 80
+# Requires logger.task_log_buffer_size: 0 above — see comment there.
+web_server:
+  port: 80
 
 ota:
   platform: esphome
