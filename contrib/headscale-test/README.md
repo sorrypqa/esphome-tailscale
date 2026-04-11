@@ -1,35 +1,36 @@
 # Local Headscale test harness
 
-A minimal Headscale instance used to **reproduce the current
-`login_server` limit** in this component. It is not a working Headscale
-endpoint — see *What this proves / what it doesn't* below for the exact
-failure signature.
+A minimal Headscale instance used to **develop and test the
+`login_server` path** in this component against a real Tailscale-
+compatible coordinator without touching Tailscale SaaS.
 
 **Not a production setup** — no TLS, default secrets, single container.
 
 ## What this proves / what it doesn't
 
 - ✅ The YAML `login_server` value reaches microlink at runtime.
-- ✅ DNS resolves, TCP connects on port 80, and the HTTP/1.1 Upgrade
-  request makes it into Headscale's `NoiseUpgradeHandler`.
-- ❌ The Noise IK handshake then **always fails** with
-  `chacha20poly1305: message authentication failed` on the Headscale
-  side and `Failed to read Noise msg2 header` on the device side.
-- ❌ The ESP never reaches `CONNECTED`, never gets a VPN IP, never
-  appears in `headscale nodes list`.
+- ✅ DNS resolves, TCP connects on the configured port, and the
+  HTTP/1.1 Upgrade request makes it into Headscale's
+  `NoiseUpgradeHandler`.
+- ✅ Microlink fetches the server's Noise public key from Headscale's
+  Tailscale-compatible `/key?v=88` endpoint and the Noise IK
+  handshake completes.
+- ✅ The node registers via `/machine/register` and the initial
+  `/machine/map` response returns a tailnet IP. The node shows up in
+  `headscale nodes list` with its IP (typically `100.64.0.1` on a
+  fresh install).
+- ⚠ The MapResponse long-poll is not yet stable: the device re-auths
+  and re-registers on roughly a 60 s cycle, so Headscale reports the
+  node as offline between cycles. Fine for iterating on the
+  registration path; not suitable as an always-on Headscale endpoint.
+  This is a microlink-side higher-protocol issue and is tracked for a
+  follow-up release.
 
-Root cause: `ml_noise_init` in microlink hardcodes Tailscale SaaS's
-Noise server public key (`microlink/components/microlink/src/ml_noise.c:232`)
-when no remote pubkey is passed. Every Headscale instance generates its
-own Noise keypair at first boot, so ChaCha20-Poly1305 can never
-authenticate the ciphertext. Making Headscale actually work requires a
-microlink patch: fetch the server's Noise pubkey from the Tailscale-
-compatible `/key?v=2` HTTP endpoint during setup, then pass the result
-into `ml_noise_init`. That change is tracked for a future release.
-
-Additionally, microlink hardcodes TCP port **80** for the coordinator
-(`ml_coord.c:230`), so this harness binds Headscale to host port 80 to
-match. That is why the compose file maps `80:80`, not `8080:8080`.
+The Noise server pubkey is fetched dynamically, so every Headscale
+install works without baking a per-install key into the firmware.
+This harness binds Headscale to host port **80** to match the
+compose file's `80:80` mapping; `login_server` also accepts explicit
+ports (`host:port` or `http://host:port`) if you remap it.
 
 ## Prerequisites
 
@@ -96,33 +97,39 @@ In your device YAML:
 tailscale:
   auth_key: "<hex preauth key from step 3>"
   hostname: "esp32-test"
-  login_server: "192.168.1.42"   # BARE IP — no scheme, no port
+  login_server: "http://192.168.1.42:80"
+  # Also accepted: "192.168.1.42", "192.168.1.42:80",
+  # "http://192.168.1.42". "https://..." is rejected.
 ```
 
-`login_server` must be a bare hostname or IPv4 address because microlink
-does not parse URLs and hardcodes port 80.
-
-Flash, then `esphome logs example-dev.yaml`. You will see:
+Flash, then `esphome logs example-dev.yaml`. On a successful run you
+will see the device fetch the Headscale Noise pubkey, complete the
+handshake, and register:
 
 ```
-[I][tailscale]: Calling microlink_init with auth_key=abc123def456... ctrl_host=192.168.1.42
-[I][microlink]: Control plane from config: 192.168.1.42
-[I][ml_coord]: Resolving 192.168.1.42...
-[I][ml_coord]: Connecting to 192.168.1.42:80...
-[I][ml_coord]: Sending Noise handshake (msg1=101 bytes, b64=...)
-[E][ml_coord]: Handshake recv failed: -1 (errno=11)
-[E][ml_coord]: Noise handshake failed
+[I][tailscale]: Calling microlink_init with auth_key=abc123def456... ctrl_host=http://192.168.1.42:80
+[I][ml_coord]: Control plane from config: 192.168.1.42 port=80
+[I][ml_coord]: Fetching server pubkey from http://192.168.1.42:80/key?v=88
+[I][ml_coord]: Server pubkey OK (first4=... last2=...)
+[I][ml_coord]: Noise handshake complete
+[I][ml_coord]: Register OK
+[I][microlink]: State: CONNECTED
 ```
 
 And on the Headscale side (`docker compose logs`):
 
 ```
-ERR noise upgrade failed error="noise handshake failed: decrypting machine key: chacha20poly1305: message authentication failed"
+INF Successfully authenticated via AuthKey node=esp32-test
 ```
 
-That pair of log lines is the verification. It proves the plumbing
-lands and identifies the exact layer (Noise IK, server pubkey
-mismatch) that needs a microlink fix.
+After that, `docker compose exec headscale headscale nodes list`
+shows the node with its tailnet IP (typically `100.64.0.1` on a
+fresh install).
+
+**Known caveat:** the MapResponse long-poll is not yet stable, so the
+device re-authenticates on roughly a 60 s cycle and Headscale reports
+the node as offline between cycles. See the parent README's *Custom
+control plane (Headscale)* section for the full picture.
 
 ## 5. Tear down
 
@@ -137,8 +144,11 @@ docker compose down -v       # full wipe
   plain TCP anyway (the Noise layer provides confidentiality), so TLS
   isn't required end-to-end — but this harness also doesn't attempt
   TLS at all. Do not expose this Headscale to the public internet.
-- DERP is disabled in this config; it would not help since we never
-  complete the control-plane handshake.
-- We test this harness as a reproduction environment, not as a product
-  feature. Tailscale SaaS remains the only supported control plane
-  for this component.
+- DERP is disabled in this config. The harness verifies the
+  control-plane handshake and registration flow; exercising
+  DERP-relayed peer traffic needs a different setup and is not part
+  of this harness.
+- This harness exists as a development and reproduction environment,
+  not as a supported end-user deployment target. Tailscale SaaS
+  remains the recommended production control plane for this
+  component until the MapResponse long-poll issue is resolved.

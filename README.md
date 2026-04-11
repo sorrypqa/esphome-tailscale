@@ -339,7 +339,7 @@ tailscale:
 | `auth_key` | *(required)* | Tailscale auth key (`tskey-auth-...`). Use `!secret`. |
 | `hostname` | `""` | Name the node registers as. Empty → Tailscale picks one. |
 | `max_peers` | `16` | Maximum number of peers to track. Raise if your tailnet has more than 16 nodes *and* you have PSRAM. |
-| `login_server` | `""` | Custom control-plane host. Empty uses the official Tailscale SaaS coordinator. A bare hostname or IP (e.g., `192.168.1.42`) points the plumbing at a different control plane, but this **does not yet work end-to-end with Headscale** — the Noise handshake fails because microlink hardcodes Tailscale SaaS's Noise server pubkey. Leave empty for production. See *Custom control plane (Headscale)* under Deployment Notes for the full explanation. |
+| `login_server` | `""` | Custom control-plane host. Empty uses the official Tailscale SaaS coordinator. Set to a Headscale (or other Tailscale-compatible) coordinator to point the node elsewhere. Accepts a bare hostname, an IP, `host:port`, or a full `http://host[:port]` URL; `https://` is rejected. Authentication and initial registration work end-to-end against Headscale 0.23.0; see *Custom control plane (Headscale)* under Deployment Notes for the current caveats. Leave empty for Tailscale SaaS. |
 
 > **No `update_interval`.** The component is fully event-driven: sensors publish only when the underlying state actually changes. There is no polling loop to tune — and nothing to reduce CPU/network cost by raising.
 
@@ -476,43 +476,52 @@ This component uses microlink, a userspace WireGuard stack. There is no kernel T
 | ------------------------ | --------- | ----- |
 | Join tailnet as leaf     | Yes       | This is the node's role. |
 | `accept_routes`          | Yes       | Off by default. |
-| Custom `login_server`    | Plumbing only | The config reaches microlink; DNS / TCP / HTTP Upgrade all work against a Headscale harness. The Noise handshake then fails because microlink hardcodes Tailscale SaaS's server pubkey. Don't use in production — see *Custom control plane (Headscale)* below. |
+| Custom `login_server`    | Auth+register verified | Headscale 0.23.0 completes Noise handshake, `/machine/register`, and the initial `/machine/map`. The MapResponse long-poll does not yet stay open, so the node re-auths on a 60 s cycle and Headscale reports it offline between cycles. See *Custom control plane (Headscale)* below. |
 | Advertise subnet routes  | No        | The ESP cannot be a subnet router. |
 | Exit node (use or offer) | No        | Neither direction is implemented. |
 | Netfilter / ACL rules    | No        | There is no OS-level firewall to hook into. |
 
 If your architecture requires the ESP to route traffic on behalf of other devices, it won't. Place a Linux subnet router alongside it and keep the ESP as a pure endpoint — that is the supported topology.
 
-### Custom control plane (Headscale) — plumbing only, not working end-to-end
+### Custom control plane (Headscale)
 
-> **TL;DR:** The `login_server` option is wired through to microlink, but **Headscale does not currently work as a full VPN endpoint** with this component. The Noise handshake fails at the crypto layer because microlink hardcodes Tailscale SaaS's Noise server public key. Use Tailscale SaaS if you want the device on a tailnet.
+> **TL;DR:** `login_server` now supports Headscale for authentication and initial registration. The device completes the Noise handshake, registers, and gets a tailnet IP. The MapResponse long-poll that keeps the node "online" is still flaky, so Headscale reports the node as offline between periodic re-auths. Fine for testing and provisioning; use Tailscale SaaS for production always-on deployments.
 
-By default the component registers against the official Tailscale SaaS coordinator at `controlplane.tailscale.com`. That path is the one we actively test and the only one that reaches `CONNECTED` with a VPN IP.
+By default the component registers against the official Tailscale SaaS coordinator at `controlplane.tailscale.com`. That is the recommended production path.
 
-The `login_server` YAML option replaces the control-plane host microlink talks to. It exists so that the contrib test harness can verify the plumbing end-to-end, and so the groundwork is in place for a future microlink change that would add real Headscale support. Today the pipeline looks like this:
+The `login_server` YAML option replaces the control-plane host microlink talks to, pointing the node at Headscale or any other Tailscale-compatible coordinator:
 
 ```yaml
 tailscale:
   auth_key: "<preauth key from headscale>"
   hostname: "esp32-tailscale"
-  login_server: "192.168.1.42"  # bare hostname / IP only, no scheme, no port
+  login_server: "http://192.168.1.42:80"   # or bare IP / hostname / host:port
 ```
 
-**What actually works with `login_server` today:**
+Accepted forms:
 
-- YAML → `tailscale.cpp` setter → `microlink_config_t.ctrl_host` → `ml->ctrl_host` → used in place of `controlplane.tailscale.com`.
-- DNS resolution, TCP connect, and the HTTP/1.1 Upgrade request against a Headscale instance running on the same machine (the test harness reaches Headscale's `NoiseUpgradeHandler`).
-- The `Login Server: <host>` line in `dump_config` and the `Control plane from config: <host>` line in boot logs.
+- Bare hostname or IP: `192.168.1.42`, `headscale.local`
+- With explicit port: `192.168.1.42:8080`
+- Full URL: `http://192.168.1.42`, `http://192.168.1.42:80`
+- `https://…` is **rejected** — TLS is not implemented in this code path.
 
-**What does not work, and why:**
+**What works end-to-end against Headscale 0.23.0:**
 
-- **Port is hardcoded.** The microlink TCP path uses port 80 unconditionally (`ml_coord.c:230`). `ctrl_host` must be a bare hostname or IP — scheme and `:port` are not parsed. To reach Headscale on a non-standard port you have to remap it on the host (the contrib harness binds the container's 80 to the host's 80).
-- **Noise server pubkey is hardcoded to Tailscale SaaS.** `ml_noise_init` falls back to `TAILSCALE_SERVER_PUBLIC_KEY` when no remote pubkey is passed (`ml_noise.c:232`). Headscale generates its own Noise keypair per install, so the IK handshake always fails with `chacha20poly1305: message authentication failed` on the Headscale side and `Failed to read Noise msg2 header` on the device. The ESP never gets a VPN IP from Headscale.
-- **Auth keys come from the coordinator that issues them.** A Tailscale SaaS `tskey-auth-...` will not work against Headscale, and vice versa. Generate the key on the same coordinator you will connect to.
+- YAML → `tailscale.cpp` setter → `microlink_config_t.ctrl_host` → `ml->ctrl_host`.
+- `host:port` parsing and HTTP `Host:` / HTTP/2 `:authority` header construction.
+- Noise server public key is fetched at setup time from the Tailscale-compatible `/key?v=88` HTTP endpoint and passed into `ml_noise_init`, so the IK handshake completes against a Headscale-generated keypair.
+- `/machine/register` over HTTP/2 — the node receives its tailnet IP from Headscale and appears in `headscale nodes list` (typically `100.64.0.1` on a fresh install).
+- The initial `/machine/map` response.
 
-Making Headscale work as a real endpoint requires a microlink change: fetch the server's Noise pubkey from the Tailscale-compatible `/key?v=2` endpoint at setup time, then pass it into `ml_noise_init` instead of the hardcoded default. That change is tracked for a future release and is out of scope here.
+**Current caveat — MapResponse long-poll:**
 
-For the full reproduction — docker-compose, a minimal `config.yaml`, and the CLI commands to create a user and preauth key — see [`contrib/headscale-test/README.md`](contrib/headscale-test/README.md). That directory is intentionally not shipped via the `packages:` distribution — it exists so contributors can reproduce the exact state described above and use it as a reference environment when working on the microlink-side fix.
+The node-map long-poll does not yet stay open against Headscale, so the device re-authenticates on a ~60 second cycle. Between cycles Headscale marks the node as offline, which means you can register and reach `CONNECTED` state momentarily but an always-on VPN endpoint is not yet reliable. This is a microlink-side higher-protocol issue (not plumbing or crypto) and is tracked for a follow-up release. Tailscale SaaS is unaffected and remains the recommended production target.
+
+**One more thing to watch for:**
+
+- **Auth keys come from the coordinator that issues them.** A Tailscale SaaS `tskey-auth-...` will not work against Headscale, and vice versa. Generate the key on the same coordinator you will connect to. Headscale uses a raw hex preauth key format, not the `tskey-auth-` prefix.
+
+For the full reproduction — docker-compose, a minimal `config.yaml`, and the CLI commands to create a user and preauth key — see [`contrib/headscale-test/README.md`](contrib/headscale-test/README.md). That directory is intentionally not shipped via the `packages:` distribution.
 
 ### Auth key and node key expiry
 
@@ -708,7 +717,7 @@ esphome-tailscale/
 │   ├── mask_screenshots.py     # Redacts sensitive info from screenshots
 │   └── svg_to_png.py           # Converts SVG diagrams to PNG for the docs
 ├── contrib/
-│   └── headscale-test/         # Local Headscale docker-compose for reproducing the login_server Noise-key limitation
+│   └── headscale-test/         # Local Headscale docker-compose harness for login_server development
 ├── microlink/                 # Vendored copy of the Tailscale protocol implementation
 ├── example.yaml               # End-user reference config that uses the GitHub package
 ├── example-dev.yaml           # Development config using the local checkout and inline entities

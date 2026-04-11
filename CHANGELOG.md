@@ -48,28 +48,23 @@ new empty `[Unreleased]` section added above it.
   peer counts by type (direct vs DERP), heap, PSRAM, uptime.
 - **SNTP time sync** included in the package so key-expiry timestamps render
   correctly in Home Assistant.
-- **Custom control-plane plumbing via `login_server`** — the YAML option
-  is now actually wired through to microlink's control-plane selection
-  (it was a no-op in earlier iterations). Empty keeps the default
-  Tailscale SaaS coordinator; setting a value points the node at a
-  different control-plane host instead. The ESPHome setter reaches
-  microlink via a new public `ctrl_host` field on `microlink_config_t`
-  (vendored microlink fork change); config-supplied values take
-  priority over the NVS-persisted override microlink already supported.
-  **Important:** this is a *plumbing* change, not a working Headscale
-  client. `ctrl_host` must currently be a bare hostname or IP — the
-  microlink TCP path is hardcoded to port 80, and microlink's Noise
-  handshake is hardcoded to Tailscale SaaS's Noise server public key
-  (`ml_noise.c:232`), so connecting to Headscale produces a
-  `chacha20poly1305: message authentication failed` at the
-  `NoiseUpgradeHandler`. See *Known limitations* below for the full
-  picture. Tailscale SaaS remains the only tested-to-completion path.
+- **Headscale support via `login_server`** — the YAML option points the
+  node at a custom control plane (Headscale, or any other Tailscale-
+  compatible coordinator) instead of Tailscale SaaS. Empty keeps the
+  default. The value may be a bare hostname, an IP, `host:port`, or a
+  full `http://host[:port]` URL; `https://` is rejected. The setter
+  reaches microlink via a new public `ctrl_host` field on
+  `microlink_config_t` (vendored microlink fork change); config-
+  supplied values take priority over the NVS-persisted override
+  microlink already supported. Authentication and node registration
+  against a Headscale 0.23.0 instance are verified end-to-end (see
+  *Confirmed working* below). Tailscale SaaS remains the default and
+  is still the fully-tested path; Headscale has a known limitation
+  with the MapResponse long-poll documented under *Known limitations*.
 - **`contrib/headscale-test/`** — docker-compose harness, minimal
   `config.yaml`, and step-by-step README for standing up a local
-  Headscale instance. Currently only useful for reproducing the Noise
-  key-mismatch described above; kept in-tree so future work on dynamic
-  server-key fetch has a reference environment. Not shipped via
-  `packages:`.
+  Headscale instance against which the component's auth and register
+  flow can be reproduced end-to-end. Not shipped via `packages:`.
 - **Packages-based distribution** — end users can drop a one-line
   `packages:` import into their YAML (see `example.yaml`) instead of hand-
   wiring every entity.
@@ -177,6 +172,27 @@ new empty `[Unreleased]` section added above it.
   ellipsis, which is enough to distinguish `tskey-auth-` from
   `tskey-client-` and similar variants during debugging without
   exposing the secret portion.
+- **Headscale Noise handshake** — microlink now fetches the server's
+  Noise static public key from the Tailscale-compatible `/key?v=88`
+  HTTP endpoint at setup time and passes it into `ml_noise_init` as
+  the remote static key, replacing the previous behavior of always
+  using Tailscale SaaS's hardcoded pubkey. Applies only when
+  `login_server` is set; the SaaS path is unchanged. Implemented in
+  `microlink/components/microlink/src/ml_coord.c` as a new
+  `fetch_server_pubkey()` helper that parses the JSON response,
+  extracts the `publicKey` field, strips the `mkey:` prefix, and
+  hex-decodes the 32 bytes into a per-instance buffer on
+  `microlink_t`.
+- **`login_server` URL parsing.** The microlink control-plane host is
+  now parsed into host + port + HTTP-Host-header components instead
+  of being passed verbatim. Accepts bare hostname, `host:port`,
+  `http://host`, and `http://host:port`; the HTTP/1.1 `Host:` header
+  and HTTP/2 `:authority` pseudo-header are constructed correctly
+  (bare host for port 80, `host:port` otherwise). `https://` is
+  rejected because TLS is not implemented in this path. Previously
+  the TCP path was hardcoded to port 80 and `ctrl_host` was copied
+  raw into the HTTP Host header, which Headscale rejected as
+  `400 Bad Request: malformed Host header` for any URL-form value.
 
 ### Removed
 
@@ -190,9 +206,10 @@ new empty `[Unreleased]` section added above it.
 - **`tailscale_ip` explicit config parameter** — replaced by runtime
   detection that reads the VPN IP directly from microlink and compares
   it against the WiFi component's `use_address`.
-- **Headscale references and claims** throughout the README — this
-  project targets the official Tailscale control plane only. Headscale
-  is not tested and no compatibility is promised.
+- **Stale "Headscale is not supported" disclaimers** throughout the
+  README have been removed in favor of the new Headscale section
+  that describes the verified auth+register path and the long-poll
+  caveat honestly.
 - **SonarCloud integration** — workflow file, `sonar-project.properties`,
   README badges, and the `SONAR_TOKEN` repo secret. Replaced by GitHub's
   native CodeQL static analysis.
@@ -233,20 +250,20 @@ verified. Treat them as the honest answer to "can I rely on this for X?"
   variants (classic ESP32, C3, C6, P4) may work via microlink, but are
   not tested by this project. If you try it on a different chip, please
   open an issue with your results.
-- **Headscale does not work end-to-end.** The `login_server` YAML
-  option is now plumbed through to microlink, and the `contrib/
-  headscale-test/` harness can verify that layer: the ESP resolves,
-  TCP-connects, sends the HTTP/1.1 Upgrade request, and Headscale's
-  `NoiseUpgradeHandler` processes it. But the Noise IK handshake fails
-  with `chacha20poly1305: message authentication failed` because
-  microlink's `ml_noise_init` hardcodes Tailscale SaaS's Noise server
-  public key (`ml_noise.c:232`) and does not fetch the peer's pubkey
-  from the Headscale-compatible `/key?v=2` endpoint. The client also
-  hardcodes TCP port 80 for the control connection (`ml_coord.c:230`),
-  so non-standard ports require host-side port remapping. Making
-  Headscale actually work requires a microlink feature — dynamic
-  server-pubkey fetch and host:port parsing — that is out of scope for
-  this release. Only Tailscale SaaS is a supported target.
+- **Headscale MapResponse long-poll not yet stable.** Noise
+  handshake, `/machine/register`, and initial `/machine/map` all
+  succeed end-to-end against Headscale 0.23.0 — the node shows up in
+  `headscale nodes list` with a tailnet IP after the very first
+  registration. But the long-poll that keeps the node "online" does
+  not stay open, so the device re-authenticates and re-registers on
+  roughly a 60-second cycle, and Headscale reports the node as
+  offline between cycles. This is a higher-layer microlink issue
+  (MapResponse stream handling against Headscale's implementation),
+  not a plumbing or crypto-layer problem, and is tracked separately.
+  For basic CI-style provisioning against Headscale the current
+  state is usable; for a live always-on Headscale deployment,
+  Tailscale SaaS remains the recommended target until the long-poll
+  issue is fixed.
 - **Node-key auto-renewal at 180 days is not yet verified.** The
   component exposes the current expiry timestamp via the `key_expiry`
   sensor and warns via `key_expiry_warning`, but whether microlink
@@ -264,6 +281,14 @@ verified. Treat them as the honest answer to "can I rely on this for X?"
 - **OTA updates over the Tailscale IP** — flashing the device via its
   `100.x.x.x` tailnet address (while the LAN path is unavailable) has
   been verified end-to-end.
+- **Headscale authentication and initial registration.** Against a
+  local Headscale 0.23.0 instance (see `contrib/headscale-test/`),
+  the device completes the Noise IK handshake, registers via
+  `/machine/register`, and receives an initial map response with a
+  tailnet IP. Verified with both bare-IP (`login_server:
+  "192.168.1.157"`) and URL (`login_server: "http://192.168.1.157:80"`)
+  forms. `headscale nodes list` shows the node present with IP
+  `100.64.0.1`. See *Known limitations* for the long-poll caveat.
 
 ---
 
