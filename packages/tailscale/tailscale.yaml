@@ -63,5 +63,8 @@ sensor:
 
 switch:
   - platform: tailscale
-    tailscale_enabled:
+    vpn_enabled:
       name: "Tailscale Enabled"
+    debug_log:
+      name: "Tailscale Debug Log"
+      restore_mode: RESTORE_DEFAULT_OFF

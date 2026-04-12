@@ -10,6 +10,9 @@ tailscale_ns = cg.esphome_ns.namespace("tailscale")
 TailscaleEnableSwitch = tailscale_ns.class_(
     "TailscaleEnableSwitch", switch.Switch, cg.Component
 )
+TailscaleDebugLogSwitch = tailscale_ns.class_(
+    "TailscaleDebugLogSwitch", switch.Switch, cg.Component
+)
 
 CONFIG_SCHEMA = cv.Schema(
     {
@@ -18,6 +21,11 @@ CONFIG_SCHEMA = cv.Schema(
             TailscaleEnableSwitch,
             entity_category="config",
             icon="mdi:vpn",
+        ),
+        cv.Optional("debug_log", default={"name": "VPN Debug Log"}): switch.switch_schema(
+            TailscaleDebugLogSwitch,
+            entity_category="config",
+            icon="mdi:bug-outline",
         ),
     }
 )
@@ -28,6 +36,7 @@ async def to_code(config):
 
     for key, setter in [
         ("vpn_enabled", "set_enable_switch"),
+        ("debug_log", "set_debug_log_switch"),
     ]:
         sw = await switch.new_switch(config[key])
         await cg.register_component(sw, {})

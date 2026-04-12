@@ -118,6 +118,9 @@ switch:
   - platform: tailscale
     vpn_enabled:
       name: "VPN Enabled"
+    debug_log:
+      name: "VPN Debug Log"
+      restore_mode: RESTORE_DEFAULT_OFF
 
 tailscale:
   auth_key: !secret tailscale_auth_key
@@ -146,14 +149,7 @@ logger:
   # Verified 2x clean (200s + 300s) with 2 SSE subscribers + browser + full
   # WG traffic @ 2026-04-12.
   hardware_uart: UART0
-  logs:
-    ml_coord: INFO
-    ml_noise: INFO
-    ml_h2: INFO
-    ml_net_io: INFO
-    microlink: INFO
-    ml_peer_nvs: INFO
-    ml_wg_mgr: INFO
+  # ml_* log levels controlled by tailscale: debug_log option
 
 api:
 

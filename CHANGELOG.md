@@ -42,8 +42,15 @@ new empty `[Unreleased]` section added above it.
 ### Changed
 
 - **VPN Connect Count** — renamed from "VPN Connections" for clarity.
-- **Microlink log levels** — demoted noisy per-packet UDP RX/TX and WG RX
-  logs from INFO to DEBUG.
+- **VPN Debug Log switch** — runtime-togglable switch (persisted across
+  reboots via NVS) replaces the old `debug_log` YAML option. When OFF
+  (default), all microlink INFO logs are suppressed to WARN for a quiet
+  serial console; when ON, full diagnostic output is restored. Requires
+  `CONFIG_LOG_TAG_LEVEL_IMPL_LINKED_LIST` sdkconfig (auto-set by the
+  component).
+- **WireGuard printf noise eliminated** — converted raw `printf("[WG_...")`
+  calls in the WireGuard lwIP layer to `WG_DEBUG()` macro, which compiles
+  to a no-op when `WG_DEBUG_LOGGING=0` (default).
 
 - **Tailscale VPN on ESP32** as a drop-in ESPHome external component. The
   device joins your tailnet as a real Tailscale node — no subnet router,

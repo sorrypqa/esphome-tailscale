@@ -39,6 +39,8 @@ class TailscaleComponent : public Component {
   void set_hostname(const std::string &hostname) { this->hostname_ = hostname; }
   void set_max_peers(uint8_t max) { this->max_peers_ = max; }
   void set_login_server(const std::string &server) { this->login_server_ = server; }
+  void set_debug_log_switch(switch_::Switch *sw) { this->debug_log_switch_ = sw; }
+  void apply_debug_log(bool enabled);
 
 #ifdef USE_BINARY_SENSOR
   void set_connected_binary_sensor(binary_sensor::BinarySensor *sensor) {
@@ -189,6 +191,7 @@ class TailscaleComponent : public Component {
 #endif
 #ifdef USE_SWITCH
   switch_::Switch *enable_switch_{nullptr};
+  switch_::Switch *debug_log_switch_{nullptr};
 #endif
 };
 
@@ -212,6 +215,27 @@ class TailscaleEnableSwitch : public switch_::Switch, public Component {
  protected:
   void write_state(bool state) override {
     this->parent_->set_tailscale_enabled(state);
+    this->publish_state(state);
+  }
+  TailscaleComponent *parent_{nullptr};
+};
+
+class TailscaleDebugLogSwitch : public switch_::Switch, public Component {
+ public:
+  void set_parent(TailscaleComponent *parent) { this->parent_ = parent; }
+  void setup() override {
+    bool restored;
+    if (this->get_initial_state_with_restore_mode().has_value()) {
+      restored = *this->get_initial_state_with_restore_mode();
+    } else {
+      restored = false;
+    }
+    this->write_state(restored);
+  }
+
+ protected:
+  void write_state(bool state) override {
+    this->parent_->apply_debug_log(state);
     this->publish_state(state);
   }
   TailscaleComponent *parent_{nullptr};

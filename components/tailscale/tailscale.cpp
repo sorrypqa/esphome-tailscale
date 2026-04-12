@@ -33,7 +33,22 @@ static void microlink_stop_task(void *arg) {
   vTaskDelete(nullptr);
 }
 
+void TailscaleComponent::apply_debug_log(bool enabled) {
+  esp_log_level_t level = enabled ? ESP_LOG_INFO : ESP_LOG_WARN;
+  esp_log_level_set("ml_coord", level);
+  esp_log_level_set("ml_noise", level);
+  esp_log_level_set("ml_h2", level);
+  esp_log_level_set("ml_net_io", level);
+  esp_log_level_set("ml_derp", level);
+  esp_log_level_set("ml_peer_nvs", level);
+  esp_log_level_set("ml_wg_mgr", level);
+  esp_log_level_set("ml_stun", level);
+  esp_log_level_set("microlink", level);
+  ESP_LOGI(TAG, "Microlink debug log: %s", enabled ? "ON" : "OFF");
+}
+
 void TailscaleComponent::setup() {
+  this->apply_debug_log(false);
   ESP_LOGI(TAG, "Initializing Tailscale (MicroLink)...");
 
   // Runtime PSRAM detection
@@ -242,6 +257,7 @@ void TailscaleComponent::dump_config() {
   if (!this->login_server_.empty()) {
     ESP_LOGCONFIG(TAG, "  Login Server: %s", this->login_server_.c_str());
   }
+  ESP_LOGCONFIG(TAG, "  Debug Log: switch-controlled (NVS-persisted)");
 }
 
 void TailscaleComponent::on_shutdown() {

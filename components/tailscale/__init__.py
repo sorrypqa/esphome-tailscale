@@ -68,6 +68,11 @@ async def to_code(config):
     add_idf_sdkconfig_option("CONFIG_MBEDTLS_POLY1305_C", True)
     add_idf_sdkconfig_option("CONFIG_MBEDTLS_HKDF_C", True)
 
+    # Enable per-tag runtime log level control (esp_log_level_set)
+    # ESPHome defaults to CONFIG_LOG_TAG_LEVEL_IMPL_NONE which makes it a no-op
+    add_idf_sdkconfig_option("CONFIG_LOG_TAG_LEVEL_IMPL_NONE", False)
+    add_idf_sdkconfig_option("CONFIG_LOG_TAG_LEVEL_IMPL_LINKED_LIST", True)
+
     # Add microlink include paths (config override handled by Kconfig defaults)
     cg.add_build_flag(f"-I{ml_include}")
     cg.add_build_flag(f"-I{ml_src}")
