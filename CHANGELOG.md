@@ -10,9 +10,7 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ## [Unreleased]
 
-This section tracks everything on `main` that has not yet been cut into a
-tagged release. Once the first tag ships, this entry will be renamed and a
-new empty `[Unreleased]` section added above it.
+## [0.1.0] — 2026-04-13
 
 ### Added
 
