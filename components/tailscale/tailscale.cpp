@@ -22,6 +22,8 @@ static const char *const TAG = "tailscale";
 static std::atomic<bool> s_vpn_stopping{false};
 static std::atomic<microlink_t *> s_active_ml{nullptr};
 static std::atomic<bool> s_stop_in_progress{false};
+static uint32_t s_stop_start_ms{0};
+static constexpr uint32_t STOP_TIMEOUT_MS = 30000;
 
 static void microlink_stop_task(void *arg) {
   auto *ml = static_cast<microlink_t *>(arg);
@@ -68,8 +70,17 @@ void TailscaleComponent::start_microlink_() {
   if (this->ml_ != nullptr)
     return;  // Already started
   if (s_stop_in_progress.load()) {
-    ESP_LOGD(TAG, "Waiting for previous instance cleanup...");
-    return;
+    if (millis() - s_stop_start_ms > STOP_TIMEOUT_MS) {
+      ESP_LOGW(TAG, "Stop task stuck for %us, force-clearing", (unsigned)(STOP_TIMEOUT_MS / 1000));
+      s_stop_in_progress.store(false);
+    } else {
+      static uint32_t last_cleanup_log_ms = 0;
+      if (millis() - last_cleanup_log_ms > 5000) {
+        last_cleanup_log_ms = millis();
+        ESP_LOGD(TAG, "Waiting for previous instance cleanup...");
+      }
+      return;
+    }
   }
   s_vpn_stopping.store(false);
 
@@ -151,6 +162,7 @@ void TailscaleComponent::loop() {
       microlink_t *old_ml = this->ml_;
       this->ml_ = nullptr;
       s_stop_in_progress.store(true);
+      s_stop_start_ms = millis();
       xTaskCreatePinnedToCore(microlink_stop_task, "ml_stop", 4096, old_ml, 1, nullptr, 0);
     }
     this->state_changed_ = true;
@@ -228,6 +240,7 @@ void TailscaleComponent::loop() {
           microlink_t *old_ml = this->ml_;
           this->ml_ = nullptr;
           s_stop_in_progress.store(true);
+      s_stop_start_ms = millis();
           xTaskCreatePinnedToCore(microlink_stop_task, "ml_stop", 4096, old_ml, 1, nullptr, 0);
           this->reconnect_phase_ = RECONNECT_FULL;
           this->reconnect_start_ms_ = millis();
@@ -708,6 +721,7 @@ void TailscaleComponent::set_tailscale_enabled(bool enabled) {
         this->connected_since_ms_ = 0;
         this->state_changed_ = true;
         s_stop_in_progress.store(true);
+      s_stop_start_ms = millis();
         xTaskCreatePinnedToCore(microlink_stop_task, "ml_stop", 4096, old_ml, 1, nullptr, 0);
       }
     });
