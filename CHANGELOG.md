@@ -31,6 +31,8 @@ new empty `[Unreleased]` section added above it.
 - **Node key expiry date in setup hint** — when node key expiry is enabled,
   the hint now shows the actual deadline date (e.g. "Disable node key
   expiry … before: 2026-10-08 14:30") instead of a generic warning.
+- **Headscale FAQ** — three new FAQ entries: self-hosted setup,
+  Headscale key expiry differences, switching between control planes.
 - **Consistent "Unknown" sensor states** — when VPN is disconnected, all
   dynamic text sensors, numeric sensors, HA route/IP sensors, and the key
   expiry warning binary sensor now show HA-native "Unknown" instead of blank
@@ -56,6 +58,11 @@ new empty `[Unreleased]` section added above it.
 
 ### Fixed
 
+- **Debug log switch not restoring after reboot** — the VPN Debug Log
+  switch state was correctly restored by ESPHome, but
+  `TailscaleComponent::setup()` unconditionally reset the log level to
+  OFF (priority 200 runs after the switch's priority 600 restore).
+  Now reads the switch's already-restored state at setup time.
 - **Microlink logs missing in package builds** — ESPHome defaults
   `CONFIG_LOG_MAXIMUM_LEVEL` to ERROR, which compiles out all ESP_LOGI/ESP_LOGW
   at the preprocessor level. The component now sets
@@ -137,6 +144,9 @@ new empty `[Unreleased]` section added above it.
   phrasing ("If ESPHome is offline from builder…").
 - **Package `refresh: 0s`** — the external_components block in the
   package YAML now bypasses GitHub's 24 h cache by default.
+- **Scrubbed personal infrastructure details** — removed real LAN IP,
+  Proxmox container reference, and local filesystem path from
+  example-dev.yaml, CHANGELOG, and scripts.
 
 - **Tailscale VPN on ESP32** as a drop-in ESPHome external component. The
   device joins your tailnet as a real Tailscale node — no subnet router,
