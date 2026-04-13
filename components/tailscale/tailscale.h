@@ -20,6 +20,9 @@
 #ifdef USE_SWITCH
 #include "esphome/components/switch/switch.h"
 #endif
+#ifdef USE_TEXT
+#include "esphome/components/text/text.h"
+#endif
 
 #include "microlink.h"
 
@@ -41,6 +44,10 @@ class TailscaleComponent : public Component {
   void set_login_server(const std::string &server) { this->login_server_ = server; }
   void set_debug_log_switch(switch_::Switch *sw) { this->debug_log_switch_ = sw; }
   void apply_debug_log(bool enabled);
+  void apply_runtime_auth_key(const std::string &key);
+#ifdef USE_TEXT
+  void set_auth_key_text(text::Text *t) { this->auth_key_text_ = t; }
+#endif
 
 #ifdef USE_BINARY_SENSOR
   void set_connected_binary_sensor(binary_sensor::BinarySensor *sensor) {
@@ -96,6 +103,9 @@ class TailscaleComponent : public Component {
   void set_login_server_text_sensor(text_sensor::TextSensor *sensor) {
     this->login_server_sensor_ = sensor;
   }
+  void set_auth_key_status_text_sensor(text_sensor::TextSensor *sensor) {
+    this->auth_key_status_sensor_ = sensor;
+  }
 #endif
 #ifdef USE_SWITCH
   void set_enable_switch(switch_::Switch *sw) { this->enable_switch_ = sw; }
@@ -127,6 +137,9 @@ class TailscaleComponent : public Component {
   void check_ip_config_(const char *vpn_ip);
   void send_ip_notification_();
   std::string detect_ha_route_(std::string *out_ip = nullptr);
+  void save_runtime_auth_key_(const std::string &key);
+  void try_save_auth_key_();
+  void publish_auth_key_status_();
 
   // Config
   std::string auth_key_;
@@ -162,6 +175,13 @@ class TailscaleComponent : public Component {
   uint32_t enable_rollback_ms_{0};
   bool tailscale_user_enabled_{true};
 
+  // Runtime auth key (NVS override)
+  std::string runtime_auth_key_;
+  int64_t runtime_auth_key_ts_{0};
+  bool auth_key_overridden_{false};
+  std::string pending_auth_key_;
+  uint8_t auth_key_sync_retries_{0};
+
 #ifdef USE_BINARY_SENSOR
   binary_sensor::BinarySensor *connected_sensor_{nullptr};
   binary_sensor::BinarySensor *key_expiry_warning_sensor_{nullptr};
@@ -182,6 +202,7 @@ class TailscaleComponent : public Component {
   text_sensor::TextSensor *ha_ip_sensor_{nullptr};
   text_sensor::TextSensor *control_plane_sensor_{nullptr};
   text_sensor::TextSensor *login_server_sensor_{nullptr};
+  text_sensor::TextSensor *auth_key_status_sensor_{nullptr};
 #endif
 #ifdef USE_SENSOR
   sensor::Sensor *peers_total_sensor_{nullptr};
@@ -195,6 +216,9 @@ class TailscaleComponent : public Component {
 #ifdef USE_SWITCH
   switch_::Switch *enable_switch_{nullptr};
   switch_::Switch *debug_log_switch_{nullptr};
+#endif
+#ifdef USE_TEXT
+  text::Text *auth_key_text_{nullptr};
 #endif
 };
 
@@ -240,6 +264,21 @@ class TailscaleDebugLogSwitch : public switch_::Switch, public Component {
   void write_state(bool state) override {
     this->parent_->apply_debug_log(state);
     this->publish_state(state);
+  }
+  TailscaleComponent *parent_{nullptr};
+};
+#endif
+
+#ifdef USE_TEXT
+class TailscaleAuthKeyText : public text::Text, public Component {
+ public:
+  void set_parent(TailscaleComponent *parent) { this->parent_ = parent; }
+  void setup() override { this->publish_state(""); }
+
+ protected:
+  void control(const std::string &value) override {
+    this->parent_->apply_runtime_auth_key(value);
+    this->publish_state("");
   }
   TailscaleComponent *parent_{nullptr};
 };

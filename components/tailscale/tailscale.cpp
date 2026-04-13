@@ -14,6 +14,8 @@
 #include "lwip/priv/tcp_priv.h"
 #include "lwip/ip_addr.h"
 #include "lwip/tcpip.h"
+#include "nvs.h"
+#include "esp_sntp.h"
 
 namespace esphome {
 namespace tailscale {
@@ -63,6 +65,31 @@ void TailscaleComponent::setup() {
     ESP_LOGW(TAG, "No PSRAM - using small buffers (max ~30 peers). Add PSRAM for large tailnets.");
   }
 
+  // Load runtime auth key override from NVS (if user set one via HA)
+  {
+    nvs_handle_t nvs;
+    if (nvs_open("tailscale", NVS_READONLY, &nvs) == ESP_OK) {
+      size_t len = 0;
+      if (nvs_get_str(nvs, "auth_key", nullptr, &len) == ESP_OK && len > 1) {
+        char *buf = new char[len];
+        if (nvs_get_str(nvs, "auth_key", buf, &len) == ESP_OK) {
+          this->runtime_auth_key_ = buf;
+          this->auth_key_overridden_ = true;
+          nvs_get_i64(nvs, "auth_ts", &this->runtime_auth_key_ts_);
+          char masked[20];
+          if (len <= 13) {
+            snprintf(masked, sizeof(masked), "(len=%u)", (unsigned)(len - 1));
+          } else {
+            snprintf(masked, sizeof(masked), "%.12s...", buf);
+          }
+          ESP_LOGI(TAG, "Runtime auth key loaded from NVS: %s", masked);
+        }
+        delete[] buf;
+      }
+      nvs_close(nvs);
+    }
+  }
+
   ESP_LOGI(TAG, "Waiting for WiFi before starting...");
 }
 
@@ -85,7 +112,8 @@ void TailscaleComponent::start_microlink_() {
   s_vpn_stopping.store(false);
 
   microlink_config_t config = {};
-  config.auth_key = this->auth_key_.c_str();
+  const std::string &effective_key = this->auth_key_overridden_ ? this->runtime_auth_key_ : this->auth_key_;
+  config.auth_key = effective_key.c_str();
   config.device_name = this->hostname_.empty() ? nullptr : this->hostname_.c_str();
   config.max_peers = this->max_peers_;
   config.ctrl_host = this->login_server_.empty() ? nullptr : this->login_server_.c_str();
@@ -632,6 +660,7 @@ void TailscaleComponent::publish_state_() {
       this->login_server_sensor_->publish_state(ls);
     }
   }
+  this->publish_auth_key_status_();
   if (this->memory_mode_sensor_ != nullptr && this->memory_mode_sensor_->state.empty()) {
     // Memory mode never changes - publish once
     size_t psram = esp_psram_get_size();
@@ -900,6 +929,112 @@ void TailscaleComponent::send_ip_notification_() {
   // Notification handled by publishing to the IP text sensor
   // The HA automation in the package watches for changes
   this->ip_notify_pending_ = false;
+}
+
+void TailscaleComponent::apply_runtime_auth_key(const std::string &key) {
+  time_t now = time(nullptr);
+  if (now < 1700000000) {
+    ESP_LOGI(TAG, "Time not synced, requesting SNTP sync before saving auth key...");
+    esp_sntp_restart();
+    this->pending_auth_key_ = key;
+    this->auth_key_sync_retries_ = 0;
+    this->try_save_auth_key_();
+    return;
+  }
+  this->save_runtime_auth_key_(key);
+}
+
+void TailscaleComponent::try_save_auth_key_() {
+  time_t now = time(nullptr);
+  if (now > 1700000000 || this->auth_key_sync_retries_ >= 5) {
+    if (now < 1700000000) {
+      ESP_LOGW(TAG, "SNTP sync timed out after 5s, saving auth key without timestamp");
+    }
+    this->save_runtime_auth_key_(this->pending_auth_key_);
+    this->pending_auth_key_.clear();
+    return;
+  }
+  this->auth_key_sync_retries_++;
+  this->set_timeout("auth_key_sync", 1000, [this]() { this->try_save_auth_key_(); });
+}
+
+void TailscaleComponent::save_runtime_auth_key_(const std::string &key) {
+  time_t now = time(nullptr);
+  int64_t timestamp = (now > 1700000000) ? (int64_t)now : 0;
+
+  nvs_handle_t nvs;
+  esp_err_t err = nvs_open("tailscale", NVS_READWRITE, &nvs);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to open NVS for auth key: %d", err);
+    return;
+  }
+
+  if (key.empty()) {
+    nvs_erase_key(nvs, "auth_key");
+    nvs_erase_key(nvs, "auth_ts");
+    this->auth_key_overridden_ = false;
+    this->runtime_auth_key_.clear();
+    this->runtime_auth_key_ts_ = 0;
+    ESP_LOGI(TAG, "Runtime auth key cleared, reverting to YAML default");
+  } else {
+    nvs_set_str(nvs, "auth_key", key.c_str());
+    nvs_set_i64(nvs, "auth_ts", timestamp);
+    this->auth_key_overridden_ = true;
+    this->runtime_auth_key_ = key;
+    this->runtime_auth_key_ts_ = timestamp;
+    char masked[20];
+    if (key.length() <= 12) {
+      snprintf(masked, sizeof(masked), "(len=%u)", (unsigned)key.length());
+    } else {
+      snprintf(masked, sizeof(masked), "%.12s...", key.c_str());
+    }
+    ESP_LOGI(TAG, "Runtime auth key saved: %s", masked);
+  }
+
+  nvs_commit(nvs);
+  nvs_close(nvs);
+
+  this->publish_auth_key_status_();
+
+  // Restart VPN with new key
+  if (this->ml_ != nullptr) {
+    ESP_LOGI(TAG, "Restarting VPN with %s auth key...", key.empty() ? "default" : "new");
+    s_active_ml.store(nullptr);
+    microlink_set_state_callback(this->ml_, nullptr, nullptr);
+    microlink_set_peer_callback(this->ml_, nullptr, nullptr);
+    microlink_t *old_ml = this->ml_;
+    this->ml_ = nullptr;
+    this->connection_count_ = 0;
+    this->microlink_start_ms_ = 0;
+    this->registration_failed_logged_ = false;
+    s_stop_in_progress.store(true);
+    s_stop_start_ms = millis();
+    xTaskCreatePinnedToCore(microlink_stop_task, "ml_stop", 4096, old_ml, 1, nullptr, 0);
+  }
+}
+
+void TailscaleComponent::publish_auth_key_status_() {
+#ifdef USE_TEXT_SENSOR
+  if (this->auth_key_status_sensor_ == nullptr) return;
+
+  std::string status;
+  if (!this->auth_key_overridden_) {
+    status = "Default (YAML)";
+  } else if (this->runtime_auth_key_ts_ > 0) {
+    struct tm tm_info;
+    time_t ts = (time_t)this->runtime_auth_key_ts_;
+    localtime_r(&ts, &tm_info);
+    char buf[64];
+    strftime(buf, sizeof(buf), "Custom (%Y-%m-%d %H:%M)", &tm_info);
+    status = buf;
+  } else {
+    status = "Custom";
+  }
+
+  if (this->auth_key_status_sensor_->state != status) {
+    this->auth_key_status_sensor_->publish_state(status);
+  }
+#endif
 }
 
 }  // namespace tailscale

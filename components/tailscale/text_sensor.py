@@ -28,6 +28,7 @@ CONFIG_SCHEMA = cv.Schema(
         cv.Optional("ha_connection_ip", default={"name": "HA API Connection IP"}): TS_SCHEMA,
         cv.Optional("control_plane", default={"name": "VPN Control Plane"}): TS_SCHEMA,
         cv.Optional("login_server", default={"name": "VPN Login Server"}): TS_SCHEMA,
+        cv.Optional("auth_key_status", default={"name": "VPN Auth Key Status"}): TS_SCHEMA,
     }
 )
 
@@ -49,6 +50,7 @@ async def to_code(config):
         ("ha_connection_ip", "set_ha_connection_ip_text_sensor"),
         ("control_plane", "set_control_plane_text_sensor"),
         ("login_server", "set_login_server_text_sensor"),
+        ("auth_key_status", "set_auth_key_status_text_sensor"),
     ]:
         if key not in config:
             continue

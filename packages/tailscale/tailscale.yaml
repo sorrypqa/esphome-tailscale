@@ -51,6 +51,14 @@ text_sensor:
       name: "VPN Control Plane"
     login_server:
       name: "VPN Login Server"
+    auth_key_status:
+      name: "VPN Auth Key Status"
+
+text:
+  - platform: tailscale
+    auth_key:
+      name: "VPN Auth Key"
+      mode: password
 
 button:
   - platform: tailscale
