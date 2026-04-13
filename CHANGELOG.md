@@ -24,6 +24,13 @@ new empty `[Unreleased]` section added above it.
 - **VPN Auto-Rollback binary sensor** — shows whether turning off VPN would
   trigger the 60 s dead-man's-switch rollback (i.e. HA is connected via
   Tailscale).
+- **Registration failure detection** — if the device fails to reach
+  `CONNECTED` within 60 seconds of starting, the setup hint sensor shows
+  an auth-source-aware message: either "Check your YAML auth key" or
+  "Check your Override auth key" depending on which key is active.
+- **Node key expiry date in setup hint** — when node key expiry is enabled,
+  the hint now shows the actual deadline date (e.g. "Disable node key
+  expiry … before: 2026-10-08 14:30") instead of a generic warning.
 - **Consistent "Unknown" sensor states** — when VPN is disconnected, all
   dynamic text sensors, numeric sensors, HA route/IP sensors, and the key
   expiry warning binary sensor now show HA-native "Unknown" instead of blank
@@ -58,6 +65,39 @@ new empty `[Unreleased]` section added above it.
   shows the current microlink state (Connecting, Registering, Reconnecting,
   Error) instead of a generic "Waiting for VPN..." message, giving users
   actionable feedback when auth_key is wrong or network is unreachable.
+- **Reboot crash** — `microlink_stop()` is now skipped during
+  `safe_reboot()`. Previously the stop path's FreeRTOS cleanup could
+  race with the reboot sequence, triggering an idle-task WDT reset
+  instead of a clean restart.
+- **HA API Connection IP dedup** — when multiple HA API clients connect
+  simultaneously, the sensor now shows only the unique IPs instead of
+  duplicated entries.
+- **Static sensors blank on boot** — `Peers Max`, `Memory Mode`,
+  `Control Plane`, `Login Server`, and `Auth Key Source` are now
+  published during `setup()` even when VPN is disconnected, so they
+  never show as "Unknown" after a fresh boot.
+- **Periodic sensor refresh when VPN disconnected** — a 10 s fallback
+  publish cycle keeps static and cleared sensors up-to-date during
+  extended disconnected periods.
+- **Stop task timeout** — the background FreeRTOS stop task now has a
+  timeout and rate-limited cleanup logging instead of potentially
+  hanging indefinitely.
+- **Node key expiry warning stuck Unknown** — after a reconnect,
+  `invalidate_state()` cleared the `has_state` flag but kept the old
+  boolean value. If the new value matched the pre-invalidation value,
+  the publish was silently skipped. All four binary sensors now check
+  `!has_state() || state != new_value` to guarantee re-publish.
+- **Auth key empty submit** — submitting an empty value in the
+  `VPN Auth Key Override` text entity now correctly reverts to the
+  YAML default. Previously HA skipped the `control()` call because
+  the published state was already empty; the entity now publishes
+  `"********"` when a custom key is active.
+- **VPN Uptime log spam** — publish frequency reduced from every 5 s
+  to a delta threshold: 5 s for the first 5 minutes (responsive
+  during startup), then 60 s thereafter.
+- **VPN Auto-Rollback false positive on Local** — the rollback was
+  incorrectly arming when HA was connected via LAN. Now only arms
+  when `detect_ha_route_()` reports a Tailscale route.
 
 ### Changed
 
@@ -80,6 +120,23 @@ new empty `[Unreleased]` section added above it.
   VPN Login Server, VPN Network, VPN Connect Count, VPN Debug Log switch)
   and fixed stale key names (`tailscale_enabled` → `vpn_enabled`,
   `tailscale_hostname` → `vpn_hostname`, `tailnet_name` → `network_name`).
+- **Key Expiry → Node Key Expiry** — the `key_expiry` text sensor and
+  `key_expiry_warning` binary sensor default names now include "Node" to
+  clearly distinguish the per-device node key lifecycle from the one-time
+  auth key. Entity IDs are unchanged.
+- **Auth key entity naming** — the text input entity is now called
+  `VPN Auth Key Override` (was `VPN Auth Key`) and its status sensor is
+  `VPN Auth Key Source` (was `VPN Auth Key Status`). Override status
+  shows `Override (YYYY-MM-DD HH:MM)` instead of `Custom (...)`.
+- **Auth-source-aware failure hints** — the 60 s connection-failure
+  hint now tells you which key to check (YAML default vs runtime
+  override) and resets the reconnect phase so the next attempt starts
+  clean.
+- **Improved hint wording** — node key expiry hint shows the actual
+  deadline date; wifi `use_address` hint uses clearer conditional
+  phrasing ("If ESPHome is offline from builder…").
+- **Package `refresh: 0s`** — the external_components block in the
+  package YAML now bypasses GitHub's 24 h cache by default.
 
 - **Tailscale VPN on ESP32** as a drop-in ESPHome external component. The
   device joins your tailnet as a real Tailscale node — no subnet router,

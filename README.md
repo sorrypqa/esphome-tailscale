@@ -42,9 +42,10 @@ The traditional answer is **subnet routers**: put a Tailscale node on the remote
 
 - **Pure Tailscale node** — the ESP joins your tailnet directly, no subnet router needed on either side.
 - **Works with official Tailscale**.
-- **Home Assistant native** — exposes a full set of Home Assistant entities out of the box: connection status, VPN IP, hostname, peer counts, key expiry, uptime, MagicDNS name, peer status, memory mode, HA connection route, reboot/reconnect buttons, enable switch.
-- **HA Connection Route sensor** — tells you *how* HA is currently reaching the device: `Tailscale Direct`, `Tailscale DERP`, or `Local`. Great for debugging connectivity.
-- **Key expiry sensor + warning** — surfaces the node key expiry timestamp from the Tailscale control plane plus a `problem` binary sensor that turns off the moment you click "Disable key expiry".
+- **Home Assistant native** — exposes a full set of Home Assistant entities out of the box: connection status, VPN IP, hostname, peer counts, node key expiry, uptime, MagicDNS name, peer status, memory mode, HA connection route, runtime auth key override, reboot/reconnect buttons, enable switch.
+- **HA API Connection Route sensor** — tells you *how* HA is currently reaching the device: `Tailscale Direct`, `Tailscale DERP`, or `Local`. Great for debugging connectivity.
+- **Node key expiry sensor + warning** — surfaces the node key expiry timestamp from the Tailscale control plane plus a `problem` binary sensor that turns off the moment you click "Disable key expiry".
+- **Runtime auth key override** — change the Tailscale auth key from HA without reflashing. Persisted in NVS across reboots.
 - **PSRAM-aware** — auto-detects PSRAM and scales internal buffers (supports large tailnets with 50+ peers).
 - **Self-healing reconnect** — three-phase recovery (rebind → full restart → reboot) when the tailnet link goes stale.
 - **Auto `use_address` hint** — tells you exactly which line to add to your YAML so HA finds the device over Tailscale after first boot.
@@ -115,7 +116,7 @@ Copy the key (starts with `tskey-auth-...`) — you'll paste it into your ESPHom
 >
 > 1. Generate an auth key, flash the ESP with it, let the device register.
 > 2. **Then go to the Tailscale admin → Machines → your ESP → ⋯ → "Disable key expiry".** This tells Tailscale "this specific device's *node* key never expires". Now the ESP stays on the tailnet forever, regardless of whether the original auth key expires.
-> 3. **Reboot the ESP** (press the Reboot button in HA or power-cycle it). The updated expiry status is only fetched from the control plane during a fresh login — a simple reconnect is not enough. After the reboot, the **VPN Key Expiry Warning** sensor should turn off and the **VPN Setup Hint** will switch from the key-expiry URL to the `use_address` hint.
+> 3. **Reboot the ESP** (press the Reboot button in HA or power-cycle it). The updated expiry status is only fetched from the control plane during a fresh login — a simple reconnect is not enough. After the reboot, the **VPN Node Key Expiry Warning** sensor should turn off and the **VPN Setup Hint** will switch from the key-expiry URL to the `use_address` hint.
 > 4. After that, the auth key is basically discardable — if it expires, nothing happens to the already-registered device. You only need a new auth key if you want to flash *another* ESP, or re-register this one from scratch (e.g. after `esptool erase_flash`).
 >
 > If you skip step 2, everything will *look* fine for months, and then one day the device silently drops off the tailnet and you'll have no idea why. **Disable node key expiry. Always. For every ESP you flash.**
@@ -277,7 +278,7 @@ By default Tailscale expires every node key after **180 days** (the tailnet-wide
 ![Tailscale Disable Key Expiry](docs/images/tailscale-disable-key-expiry.png)
 <!-- IMAGE: Tailscale admin → Machines → row for the ESP32 → menu open, "Disable key expiry" highlighted. Also show the "Expires" column turning into "Disabled". -->
 
-In Home Assistant you'll see the `Tailscale Key Expiry` timestamp sensor display as **Unknown** (because the timestamp no longer exists — that's the standard HA rendering for an empty `timestamp` sensor) and the `Tailscale Key Expiry Warning` binary sensor display as **OK** (the `problem` device class renders `off` as "OK" with a check icon). That `Unknown` + `OK` pair is the recommended steady state for an unattended node — nothing is missing, nothing is wrong, the key simply never expires.
+In Home Assistant you'll see the `VPN Node Key Expiry` timestamp sensor display as **Unknown** (because the timestamp no longer exists — that's the standard HA rendering for an empty `timestamp` sensor) and the `VPN Node Key Expiry Warning` binary sensor display as **OK** (the `problem` device class renders `off` as "OK" with a check icon). That `Unknown` + `OK` pair is the recommended steady state for an unattended node — nothing is missing, nothing is wrong, the key simply never expires.
 
 | Disabled (recommended) | Enabled (needs attention) |
 | :---: | :---: |
@@ -306,38 +307,51 @@ All entities are created automatically when you include the package.
 
 | Entity | Description |
 | --- | --- |
-| **Tailscale Connected** | `on` when the Tailscale state machine reports `CONNECTED` (WireGuard tunnel is up and the control plane has handshaken). Device class: `connectivity`. |
-| **Tailscale Key Expiry Warning** | `on` when the node's key expiry is **enabled** in the Tailscale admin (HA shows this as "Problem" — the device will eventually get kicked off the tailnet). `off` once you click **Disable key expiry** (HA shows this as "OK" with a check icon, since `device_class: problem`). |
+| **VPN Connected** | `on` when the Tailscale state machine reports `CONNECTED` (WireGuard tunnel is up and the control plane has handshaken). Device class: `connectivity`. |
+| **VPN Node Key Expiry Warning** | `on` when the node's key expiry is **enabled** in the Tailscale admin (HA shows this as "Problem" — the device will eventually get kicked off the tailnet). `off` once you click **Disable key expiry** (HA shows this as "OK" with a check icon, since `device_class: problem`). |
+| **HA API Connected** | `on` when at least one Home Assistant API client is connected. Device class: `connectivity`. |
+| **VPN Auto-Rollback** | `on` when HA is connected via Tailscale and turning off the VPN switch would trigger the 60 s dead-man's-switch rollback. `off` when HA is on LAN — the switch can be toggled freely. |
 
 ### Text sensors (diagnostic)
 
 | Entity | Description |
 | --- | --- |
-| **Tailscale IP** | The `100.x.y.z` address assigned to this node. Empty until connected. |
-| **Tailscale Hostname** | The hostname this node registered with, e.g. `esp32-tailscale`. |
-| **Tailscale MagicDNS** | The FQDN, e.g. `esp32-tailscale.tailXXXXX.ts.net`. |
-| **Tailscale Tailnet** | Just the tailnet domain portion, e.g. `tailXXXXX.ts.net`. |
-| **Tailscale Memory** | Reports `PSRAM <size>KB` or `Internal RAM` so you can confirm PSRAM was detected. |
-| **Tailscale Setup Hint** | Human-readable next-action hint, e.g. `wifi use_address: 100.x.y.z`. Use this in a HA automation to remind yourself after first flash. |
-| **Tailscale Peer Status** | `OK` / `Warning` / `Full` based on how close you are to the `max_peers` limit. |
-| **Tailscale Key Expiry** | ISO-8601 timestamp of the node's key expiry (`device_class: timestamp`). Once you disable key expiry on the node it becomes empty — HA renders that as **Unknown**, which is the correct state for a timestamp that no longer applies. See the **Tailscale Key Expiry Warning** binary sensor for the simple on/off view. |
-| **HA Connection Route** | How the *currently-connected* HA instance is reaching the device: `Tailscale Direct`, `Tailscale DERP`, `Local`, or `Unknown`. Updates live. |
+| **VPN IP** | The `100.x.y.z` address assigned to this node. Empty until connected. |
+| **VPN Hostname** | The hostname this node registered with, e.g. `esp32-tailscale`. |
+| **VPN MagicDNS** | The FQDN, e.g. `esp32-tailscale.tailXXXXX.ts.net`. |
+| **VPN Network** | Just the tailnet domain portion, e.g. `tailXXXXX.ts.net`. |
+| **Device Memory** | Reports `PSRAM <size>KB` or `Internal RAM` so you can confirm PSRAM was detected. |
+| **VPN Setup Hint** | Human-readable next-action hint, e.g. `wifi use_address: 100.x.y.z`. Shows auth-source-aware failure messages after 60 s, node key expiry deadline date when applicable, and clickable GitHub README links. |
+| **VPN Peer Status** | `OK` / `Warning` / `Full` based on how close you are to the `max_peers` limit. |
+| **VPN Node Key Expiry** | ISO-8601 timestamp of the node's key expiry (`device_class: timestamp`). Once you disable key expiry on the node it becomes empty — HA renders that as **Unknown**, which is the correct state for a timestamp that no longer applies. See the **VPN Node Key Expiry Warning** binary sensor for the simple on/off view. |
+| **HA API Connection Route** | How the *currently-connected* HA instance is reaching the device: `Tailscale Direct`, `Tailscale DERP`, `Local`, or `Unknown`. Updates live. |
+| **HA API Connection IP** | The IP address of the currently-connected HA API client. Deduplicated when multiple clients connect. |
+| **VPN Control Plane** | The control-plane URL in use (`controlplane.tailscale.com` for Tailscale SaaS, or the custom `login_server` value for Headscale). Static — set at boot. |
+| **VPN Login Server** | The raw `login_server` YAML value (empty for Tailscale SaaS). Static — set at boot. |
+| **VPN Auth Key Source** | Shows `Default (YAML)` when using the built-in auth key, or `Override (YYYY-MM-DD HH:MM)` with the timestamp when a runtime override is active. |
 
 ### Sensors
 
 | Entity | Description |
 | --- | --- |
-| **Tailscale Peers Online** | How many peers in the tailnet are currently reachable. |
-| **Tailscale Peers Direct** | How many of those are on a direct WireGuard path (NAT traversal succeeded). |
-| **Tailscale Peers DERP** | How many are going through Tailscale's DERP relays. Ideally zero. |
-| **Tailscale Peers Max** | Your configured `max_peers` value. |
-| **Tailscale Uptime** | Seconds since the `CONNECTED` state was entered. Resets on reconnect. |
+| **VPN Peers Online** | How many peers in the tailnet are currently reachable. |
+| **VPN Peers Direct** | How many of those are on a direct WireGuard path (NAT traversal succeeded). |
+| **VPN Peers DERP** | How many are going through Tailscale's DERP relays. Ideally zero. |
+| **VPN Peers Max** | Your configured `max_peers` value. |
+| **VPN Uptime** | Seconds since the `CONNECTED` state was entered. Resets on reconnect. Publishes every 5 s during the first 5 minutes, then every 60 s. |
+| **VPN Connect Count** | Lifetime count of successful VPN connections since boot. Does not reset on reconnect. |
+
+### Text inputs
+
+| Entity | Description |
+| --- | --- |
+| **VPN Auth Key Override** | Password-mode text input. Submit a new Tailscale auth key to replace the YAML default at runtime — no reflash needed. The key is persisted in NVS across reboots. Submit an empty value to revert to the YAML default. See **VPN Auth Key Source** for which key is active. |
 
 ### Switches
 
 | Entity | Description |
 | --- | --- |
-| **Tailscale Enabled** | Stops the Tailscale stack when turned off. See [Enable switch caveats](#enable-switch-caveats) below. |
+| **VPN Enabled** | Stops the Tailscale stack when turned off. See [Enable switch caveats](#enable-switch-caveats) below. |
 | **VPN Debug Log** | Toggles verbose microlink/VPN logging (INFO ↔ WARN). State persists across reboots via NVS. Only affects VPN-related log tags — ESPHome's own logs are unchanged. |
 
 > **Note:** The debug log switch controls the *runtime* log level of the VPN components. Your ESPHome `logger: level:` setting still acts as a global ceiling — if you set it to `ERROR`, VPN debug logs won't appear even with the switch ON. The default `DEBUG` or `INFO` level works fine.
@@ -346,7 +360,7 @@ All entities are created automatically when you include the package.
 
 | Entity | Description |
 | --- | --- |
-| **Tailscale Reconnect** | Triggers the three-phase reconnect state machine (rebind → full restart → reboot). Useful if you suspect the tunnel is wedged. |
+| **VPN Reconnect** | Triggers the three-phase reconnect state machine (rebind → full restart → reboot). Useful if you suspect the tunnel is wedged. |
 | **Reboot** | Standard ESPHome restart button. |
 
 ---
@@ -395,7 +409,7 @@ This ESPHome component wraps microlink in a `PollingComponent`, feeds it your au
 
 Tailscale tries to make every peer-to-peer connection a **direct** UDP path. When that fails (strict NAT, UDP-blocked networks, etc.) it falls back to **DERP**: relays operated by Tailscale that tunnel traffic for you. DERP is encrypted end-to-end — the relays only see ciphertext — but they add latency.
 
-The `Tailscale Peers Direct` and `Tailscale Peers DERP` sensors tell you at a glance how your peers are connected. The `HA Connection Route` sensor tells you specifically which path Home Assistant is using *right now*.
+The `VPN Peers Direct` and `VPN Peers DERP` sensors tell you at a glance how your peers are connected. The `HA API Connection Route` sensor tells you specifically which path Home Assistant is using *right now*.
 
 > **Note:** There is **no DERP switch**. microlink always needs DERP available as a fallback (it hardcodes this internally). Turning DERP off would only disrupt the tunnel without actually disabling DERP, so the switch was removed.
 
@@ -406,7 +420,7 @@ On boot the component queries `esp_psram_get_size()` and reports one of two mode
 - **`PSRAM <size>KB`** — large buffers, full peer list support, up to 64 peers.
 - **`Internal RAM`** — small buffers, ~30-peer effective limit, works but not recommended.
 
-Check the `Tailscale Memory` sensor after first boot to confirm.
+Check the `Device Memory` sensor after first boot to confirm.
 
 ### HA Connection Route
 
@@ -432,29 +446,29 @@ Once the device is added via the ESPHome integration, all entities show up under
 type: entities
 title: Tailscale ESP32
 entities:
-  - entity: binary_sensor.esp32_tailscale_tailscale_connected
+  - entity: binary_sensor.esp32_tailscale_vpn_connected
     name: Connected
-  - entity: sensor.esp32_tailscale_tailscale_uptime
+  - entity: sensor.esp32_tailscale_vpn_uptime
     name: Uptime
-  - entity: text_sensor.esp32_tailscale_tailscale_ip
-    name: Tailscale IP
-  - entity: text_sensor.esp32_tailscale_tailscale_magicdns
+  - entity: text_sensor.esp32_tailscale_vpn_ip
+    name: VPN IP
+  - entity: text_sensor.esp32_tailscale_vpn_magicdns
     name: MagicDNS
-  - entity: text_sensor.esp32_tailscale_ha_connection_route
+  - entity: text_sensor.esp32_tailscale_ha_api_connection_route
     name: HA Route
-  - entity: sensor.esp32_tailscale_tailscale_peers_online
+  - entity: sensor.esp32_tailscale_vpn_peers_online
     name: Peers online
-  - entity: sensor.esp32_tailscale_tailscale_peers_direct
+  - entity: sensor.esp32_tailscale_vpn_peers_direct
     name: Peers direct
-  - entity: sensor.esp32_tailscale_tailscale_peers_derp
+  - entity: sensor.esp32_tailscale_vpn_peers_derp
     name: Peers DERP
-  - entity: binary_sensor.esp32_tailscale_tailscale_key_expiry_warning
+  - entity: binary_sensor.esp32_tailscale_vpn_node_key_expiry_warning
     name: Key expiry warning
-  - entity: sensor.esp32_tailscale_tailscale_key_expiry
+  - entity: text_sensor.esp32_tailscale_vpn_node_key_expiry
     name: Key expires
   - type: buttons
     entities:
-      - entity: button.esp32_tailscale_tailscale_reconnect
+      - entity: button.esp32_tailscale_vpn_reconnect
         name: Reconnect
       - entity: button.esp32_tailscale_reboot
         name: Reboot
@@ -462,13 +476,13 @@ entities:
 
 ### Automation: warn if key expiry is still enabled
 
-If you forget to disable key expiry on a new node, this automation nags you as soon as the device comes online with expiry still set. The `Tailscale Key Expiry Warning` binary sensor is `on` whenever the control plane reports a non-zero expiry.
+If you forget to disable key expiry on a new node, this automation nags you as soon as the device comes online with expiry still set. The `VPN Node Key Expiry Warning` binary sensor is `on` whenever the control plane reports a non-zero expiry.
 
 ```yaml
 alias: Tailscale key expiry still enabled
 trigger:
   - platform: state
-    entity_id: binary_sensor.esp32_tailscale_tailscale_key_expiry_warning
+    entity_id: binary_sensor.esp32_tailscale_vpn_node_key_expiry_warning
     to: "on"
     for: "00:02:00"
 action:
@@ -477,7 +491,7 @@ action:
       title: "Tailscale key expiry still on"
       message: >
         ESP32 Tailscale node key will expire at
-        {{ states('sensor.esp32_tailscale_tailscale_key_expiry') }}.
+        {{ states('text_sensor.esp32_tailscale_vpn_node_key_expiry') }}.
         Open the Tailscale admin console and click "Disable key expiry".
 ```
 
@@ -494,7 +508,7 @@ If your network already has a Tailscale subnet router advertising the LAN CIDR t
 We recommend:
 
 - Let the ESP join as its own tailnet node — that is the whole point of this component. The direct path is the one you want.
-- Do **not** re-advertise the ESP's LAN CIDR through the subnet router purely to reach the device; it creates duplicate routing state and makes `HA Connection Route` diagnostics ambiguous.
+- Do **not** re-advertise the ESP's LAN CIDR through the subnet router purely to reach the device; it creates duplicate routing state and makes `HA API Connection Route` diagnostics ambiguous.
 - Keep `accept_routes: false` on the ESP itself unless you specifically need another subnet. With `accept_routes: true`, the node honors advertised routes that can include its own LAN — a self-loop that never completes, and a source of flaky behavior that is hard to spot from the logs.
 
 ### Userspace WireGuard: what the node can and cannot do
@@ -552,7 +566,7 @@ For the full reproduction — docker-compose, a minimal `config.yaml`, and the C
 
 Two settings in the Tailscale admin panel decide whether an unattended ESP stays healthy:
 
-1. **Node key expiry.** By default, each machine's key expires after 180 days. When that happens the device drops off the tailnet until re-authentication, which on a sealed ESP means a return visit with a reflash. Disable key expiry per device right after first boot: *Machines → device → ⋯ → Disable key expiry*. The `Tailscale Key Expiry Warning` binary sensor will flip off once it is done.
+1. **Node key expiry.** By default, each machine's key expires after 180 days. When that happens the device drops off the tailnet until re-authentication, which on a sealed ESP means a return visit with a reflash. Disable key expiry per device right after first boot: *Machines → device → ⋯ → Disable key expiry*. The `VPN Node Key Expiry Warning` binary sensor will flip off once it is done.
 2. **Auth key flags.** When generating the key used in `secrets.yaml`, we recommend:
    - **Pre-authorized**, so the node joins without manual approval.
    - **Non-ephemeral**, so the machine entry persists across reboots. Ephemeral nodes are wiped while offline and reappear as new entries every boot, quickly cluttering the admin panel.
@@ -585,7 +599,7 @@ What usually prevents a direct connection:
 - **Outbound UDP 41641** must be reachable for the initial handshake. Most consumer networks allow this; some restricted corporate networks do not.
 - **Hairpin NAT** on the local router affects whether a peer on the same LAN can reach the ESP via its tailnet IP while both are local.
 
-How to tell which mode is in use: the `HA Connection Route` text sensor reports `Tailscale Direct` or `Tailscale DERP` for the current HA session, and the serial log emits the same classification per peer.
+How to tell which mode is in use: the `HA API Connection Route` text sensor reports `Tailscale Direct` or `Tailscale DERP` for the current HA session, and the serial log emits the same classification per peer.
 
 ### Hardware realities
 
@@ -623,18 +637,18 @@ Check the serial log for the state machine output. You should cycle through `IDL
 | `WIFI_WAIT` | WiFi still joining | Wait or check SSID/password |
 | `CONNECTING` | Can't reach control plane | Check DNS and internet connectivity on the LAN |
 | `REGISTERING` | Control plane rejected the auth key | Key expired, used on too many devices, or the tailnet has device approval on — check the Tailscale admin |
-| `ERROR` | microlink crash | See serial log for details; try `Tailscale Reconnect` button or reboot |
+| `ERROR` | microlink crash | See serial log for details; try `VPN Reconnect` button or reboot |
 
 ### Auth key expired
 
-Symptom: the log shows `State: ERROR` / `REGISTERING` failing after a fresh flash, the `Tailscale Connected` binary sensor never turns on, and the Tailscale admin shows no new machine. This usually means the pre-authentication key you baked into the firmware has expired or been revoked.
+Symptom: the log shows `State: ERROR` / `REGISTERING` failing after a fresh flash, the `VPN Connected` binary sensor never turns on, and the Tailscale admin shows no new machine. This usually means the pre-authentication key you baked into the firmware has expired or been revoked.
 
 1. Generate a new auth key (see [Quick Start step 1](#1-create-a-tailscale-auth-key)).
-2. Update `secrets.yaml`.
-3. Re-flash (OTA is fine if the device is still reachable; otherwise USB).
-4. **Disable key expiry on the new node** right away so it doesn't happen again. The `Tailscale Key Expiry Warning` binary sensor will flip to `off` once you do.
+2. **Option A — no reflash:** paste the new key into the **VPN Auth Key Override** text entity in HA (Settings → Devices → your ESP → Controls). The device reconnects immediately with the new key, which is persisted in NVS across reboots. The **VPN Auth Key Source** sensor will show `Override (YYYY-MM-DD HH:MM)`.
+3. **Option B — reflash:** update `secrets.yaml` and re-flash (OTA if reachable, otherwise USB).
+4. **Disable key expiry on the new node** right away so it doesn't happen again. The `VPN Node Key Expiry Warning` binary sensor will flip to `off` once you do.
 
-> **Note:** The `Tailscale Key Expiry` sensor reflects the *node* key expiry (received from the Tailscale control plane), not the auth key used to register the device. Auth key expiry is never sent to the device, so it can't be monitored from HA.
+> **Note:** The `VPN Node Key Expiry` sensor reflects the *node* key expiry (received from the Tailscale control plane), not the auth key used to register the device. Auth key expiry is never sent to the device, so it can't be monitored from HA.
 
 ### HA can't reach the device after OTA
 
@@ -658,11 +672,11 @@ tailscale:
 
 You need PSRAM for anything above ~30.
 
-### `HA Connection Route` shows `Tailscale (unknown)`
+### `HA API Connection Route` shows `Tailscale (unknown)`
 
 This means HA is connecting from a `100.x` address, but the ESP doesn't have that peer in its peer table yet. Usually a transient state right after startup — wait for the next peer callback and it'll resolve to `Tailscale Direct` or `Tailscale DERP`.
 
-### `HA Connection Route` shows `Local` when you expect Tailscale
+### `HA API Connection Route` shows `Local` when you expect Tailscale
 
 This means Home Assistant (or the ESPHome Builder, etc.) is reaching the device via its LAN IP, not the Tailscale IP. Either:
 
@@ -677,7 +691,7 @@ Home Assistant's ESPHome add-on builder uses zeroconf / mDNS, which doesn't cros
 
 ## Enable switch caveats
 
-The `Tailscale Enabled` switch really does stop the microlink stack when turned off — but there's one gotcha:
+The `VPN Enabled` switch really does stop the microlink stack when turned off — but there's one gotcha:
 
 **If Home Assistant is reaching the ESP *only* through Tailscale** (no LAN path), then turning the switch off will kill HA's own connection to the device. The component has a 60-second dead-man's-switch safety: if HA doesn't re-establish a connection within 60 seconds, the switch rolls back to its previous state automatically.
 
@@ -725,6 +739,7 @@ esphome-tailscale/
 │   ├── sensor.py              # Sensor platform
 │   ├── text_sensor.py         # Text sensor platform
 │   ├── switch.py              # Switch platform
+│   ├── text.py                # Text input platform (auth key override)
 │   ├── button.py              # Button platform
 │   ├── tailscale.h            # C++ component header
 │   └── tailscale.cpp          # C++ component implementation
