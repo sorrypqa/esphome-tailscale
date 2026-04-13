@@ -302,11 +302,12 @@ void TailscaleComponent::dump_config() {
 
 void TailscaleComponent::on_shutdown() {
   if (this->ml_ != nullptr) {
-    ESP_LOGI(TAG, "Shutting down Tailscale...");
+    ESP_LOGI(TAG, "Shutting down Tailscale (skipping cleanup — device is rebooting)");
     s_active_ml.store(nullptr);
     s_vpn_stopping.store(true);
-    microlink_stop(this->ml_);
-    microlink_destroy(this->ml_);
+    // Don't call microlink_stop/destroy — it blocks long enough to trigger
+    // the idle task WDT, causing a spurious "CRASH DETECTED" on next boot.
+    // The device is rebooting anyway, so cleanup is unnecessary.
     this->ml_ = nullptr;
   }
 }
