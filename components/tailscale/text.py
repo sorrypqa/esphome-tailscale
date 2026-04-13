@@ -29,7 +29,7 @@ async def to_code(config):
     parent = await cg.get_variable(config[CONF_TAILSCALE_ID])
 
     if "auth_key" in config:
-        t = await text.new_text(config["auth_key"], min_length=0, max_length=64)
+        t = await text.new_text(config["auth_key"], min_length=0, max_length=128)
         await cg.register_component(t, {})
         cg.add(t.set_parent(parent))
         cg.add(parent.set_auth_key_text(t))
