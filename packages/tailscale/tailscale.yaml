@@ -4,6 +4,7 @@ external_components:
       url: https://github.com/Csontikka/esphome-tailscale.git
       ref: main
     components: [tailscale]
+    refresh: 0s
 
 time:
   - platform: sntp
