@@ -262,7 +262,7 @@ void TailscaleComponent::loop() {
     if (now_ms - this->last_hint_ms_ >= HINT_INTERVAL_MS) {
       this->last_hint_ms_ = now_ms;
       if (!this->vpn_ip_str_.empty()) {
-        ESP_LOGI(TAG, "Hint: set 'wifi: use_address: \"%s\"' in your ESPHome YAML if device is not visible in Builder",
+        ESP_LOGI(TAG, "Hint: if ESPHome is offline in Builder, set 'wifi: use_address: \"%s\"' in your YAML",
                  this->vpn_ip_str_.c_str());
       }
       // Peer capacity warnings
@@ -519,7 +519,7 @@ void TailscaleComponent::publish_state_() {
     if (vpn_ip.empty()) {
       hint = "Waiting for VPN...";
     } else {
-      hint = "Set wifi use_address: \"" + vpn_ip + "\" https://github.com/Csontikka/esphome-tailscale#wifi-use-address";
+      hint = "If ESPHome is offline in Builder, set wifi use_address: \"" + vpn_ip + "\" — https://github.com/Csontikka/esphome-tailscale#wifi-use-address";
     }
     if (this->setup_status_sensor_->state != hint) {
       this->setup_status_sensor_->publish_state(hint);
