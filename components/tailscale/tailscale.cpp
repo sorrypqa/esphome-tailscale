@@ -199,10 +199,11 @@ void TailscaleComponent::loop() {
     this->publish_state_();
   }
 
-  // Periodic sensor refresh (uptime, peer counts, HA route)
-  if (this->ml_ != nullptr && this->is_connected()) {
+  // Periodic sensor refresh
+  {
     uint32_t now = millis();
-    if (now - this->last_sensor_publish_ms_ >= 5000) {
+    uint32_t interval = this->is_connected() ? 5000 : 10000;
+    if (now - this->last_sensor_publish_ms_ >= interval) {
       this->last_sensor_publish_ms_ = now;
       this->publish_state_();
     }
