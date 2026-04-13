@@ -15,7 +15,7 @@ CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(CONF_TAILSCALE_ID): cv.use_id(TailscaleComponent),
         cv.Optional(
-            "auth_key", default={"name": "VPN Auth Key", "mode": "password"}
+            "auth_key", default={"name": "VPN Auth Key Override", "mode": "password"}
         ): text.text_schema(
             TailscaleAuthKeyText,
             entity_category="config",

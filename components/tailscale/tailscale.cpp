@@ -1025,16 +1025,16 @@ void TailscaleComponent::publish_auth_key_status_() {
 
   std::string status;
   if (!this->auth_key_overridden_) {
-    status = "Default (YAML)";
+    status = "Default";
   } else if (this->runtime_auth_key_ts_ > 0) {
     struct tm tm_info;
     time_t ts = (time_t)this->runtime_auth_key_ts_;
     localtime_r(&ts, &tm_info);
     char buf[64];
-    strftime(buf, sizeof(buf), "Custom (%Y-%m-%d %H:%M)", &tm_info);
+    strftime(buf, sizeof(buf), "Override (%Y-%m-%d %H:%M)", &tm_info);
     status = buf;
   } else {
-    status = "Custom";
+    status = "Override";
   }
 
   if (this->auth_key_status_sensor_->state != status) {

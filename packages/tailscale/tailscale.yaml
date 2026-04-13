@@ -57,7 +57,7 @@ text_sensor:
 text:
   - platform: tailscale
     auth_key:
-      name: "VPN Auth Key"
+      name: "VPN Auth Key Override"
       mode: password
 
 button:

@@ -16,11 +16,11 @@ new empty `[Unreleased]` section added above it.
 
 ### Added
 
-- **Runtime auth key change** — new `text` entity (password mode) lets you
-  change the Tailscale auth key from HA without reflashing. Empty submit
-  reverts to the YAML default. Key is persisted in NVS across reboots.
-  New `VPN Auth Key Status` text sensor shows `Default (YAML)` or
-  `Custom (YYYY-MM-DD HH:MM)` with the timestamp of the override.
+- **Runtime auth key override** — new `VPN Auth Key Override` text entity
+  (password mode) lets you change the Tailscale auth key from HA without
+  reflashing. Empty submit reverts to the YAML default. Key is persisted
+  in NVS across reboots. New `VPN Auth Key Status` text sensor shows
+  `Default` or `Override (YYYY-MM-DD HH:MM)` with the timestamp.
 - **VPN Auto-Rollback binary sensor** — shows whether turning off VPN would
   trigger the 60 s dead-man's-switch rollback (i.e. HA is connected via
   Tailscale).
