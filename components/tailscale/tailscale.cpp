@@ -398,10 +398,17 @@ void TailscaleComponent::publish_state_() {
   }
   if (this->setup_status_sensor_ != nullptr) {
     std::string hint;
+#ifdef USE_BINARY_SENSOR
+    if (this->key_expiry_warning_sensor_ != nullptr &&
+        this->key_expiry_warning_sensor_->has_state() &&
+        this->key_expiry_warning_sensor_->state) {
+      hint = "Disable key expiry! https://github.com/Csontikka/esphome-tailscale#disable-key-expiry";
+    } else
+#endif
     if (vpn_ip.empty()) {
       hint = "Waiting for VPN...";
     } else {
-      hint = "wifi use_address: " + vpn_ip;
+      hint = "Set wifi use_address: \"" + vpn_ip + "\" https://github.com/Csontikka/esphome-tailscale#wifi-use-address";
     }
     if (this->setup_status_sensor_->state != hint) {
       this->setup_status_sensor_->publish_state(hint);

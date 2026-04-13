@@ -102,6 +102,8 @@ Then fill in the dialog:
 
 Copy the key (starts with `tskey-auth-...`) — you'll paste it into your ESPHome secrets in a moment.
 
+<a id="disable-key-expiry"></a>
+
 > ### 🔑 Auth key vs. node key — important
 >
 > Tailscale has **two** different kinds of key, and they're easy to confuse:
@@ -224,6 +226,8 @@ Whichever method you picked, once the firmware is running connect to the serial 
 [I][tailscale]: Connected! VPN IP: 100.xx.yy.zz
 [I][tailscale]: Set wifi use_address: "100.xx.yy.zz" in your ESPHome YAML
 ```
+
+<a id="wifi-use-address"></a>
 
 ### 4. Pin `use_address` to the Tailscale IP
 

@@ -51,6 +51,10 @@ new empty `[Unreleased]` section added above it.
 - **WireGuard printf noise eliminated** — converted raw `printf("[WG_...")`
   calls in the WireGuard lwIP layer to `WG_DEBUG()` macro, which compiles
   to a no-op when `WG_DEBUG_LOGGING=0` (default).
+- **Setup Hint URLs** — the VPN Setup Hint sensor now includes clickable
+  GitHub README links: key expiry warning points to `#disable-key-expiry`,
+  wifi use_address hint points to `#wifi-use-address`. Key expiry warning
+  takes priority over the use_address hint.
 - **Package YAML updated** — added all missing entities (HA API Connected,
   VPN Auto-Rollback, VPN Hostname, HA API Connection IP, VPN Control Plane,
   VPN Login Server, VPN Network, VPN Connect Count, VPN Debug Log switch)
