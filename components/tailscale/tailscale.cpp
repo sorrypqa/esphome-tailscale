@@ -844,8 +844,11 @@ std::string TailscaleComponent::detect_ha_route_(std::string *out_ip) {
                      ((uint32_t)b2 << 8) | (uint32_t)b3;
     char ip_buf[16];
     snprintf(ip_buf, sizeof(ip_buf), "%u.%u.%u.%u", b0, b1, b2, b3);
-    if (!all_ips.empty()) all_ips += ", ";
-    all_ips += ip_buf;
+    std::string ip_str(ip_buf);
+    if (all_ips.find(ip_str) == std::string::npos) {
+      if (!all_ips.empty()) all_ips += ", ";
+      all_ips += ip_str;
+    }
     bool in_tailscale = (b0 == 100) && (b1 >= 64) && (b1 <= 127);
     if (in_tailscale) {
       ts_pcb_found = true;
