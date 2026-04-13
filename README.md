@@ -41,7 +41,7 @@ The traditional answer is **subnet routers**: put a Tailscale node on the remote
 ## Features
 
 - **Pure Tailscale node** — the ESP joins your tailnet directly, no subnet router needed on either side.
-- **Works with official Tailscale**.
+- **Works with official Tailscale and Headscale** — connects to Tailscale SaaS out of the box; set `login_server` to point at a self-hosted [Headscale](https://github.com/juanfont/headscale) instance instead.
 - **Home Assistant native** — exposes a full set of Home Assistant entities out of the box: connection status, VPN IP, hostname, peer counts, node key expiry, uptime, MagicDNS name, peer status, memory mode, HA connection route, runtime auth key override, reboot/reconnect buttons, enable switch.
 - **HA API Connection Route sensor** — tells you *how* HA is currently reaching the device: `Tailscale Direct`, `Tailscale DERP`, or `Local`. Great for debugging connectivity.
 - **Node key expiry sensor + warning** — surfaces the node key expiry timestamp from the Tailscale control plane plus a `problem` binary sensor that turns off the moment you click "Disable key expiry".
@@ -74,7 +74,7 @@ Boards currently verified:
 - **ESPHome 2026.3.1** or newer
 - **ESP-IDF framework** (not Arduino) — this is enforced automatically by the package
 - **Home Assistant** with the ESPHome integration enabled
-- A **Tailscale account**
+- A **Tailscale account** (or a self-hosted [Headscale](https://github.com/juanfont/headscale) instance)
 
 ---
 
@@ -308,7 +308,7 @@ All entities are created automatically when you include the package.
 | Entity | Description |
 | --- | --- |
 | **VPN Connected** | `on` when the Tailscale state machine reports `CONNECTED` (WireGuard tunnel is up and the control plane has handshaken). Device class: `connectivity`. |
-| **VPN Node Key Expiry Warning** | `on` when the node's key expiry is **enabled** in the Tailscale admin (HA shows this as "Problem" — the device will eventually get kicked off the tailnet). `off` once you click **Disable key expiry** (HA shows this as "OK" with a check icon, since `device_class: problem`). |
+| **VPN Node Key Expiry Warning** | `on` when the node's key expiry is **enabled** (Tailscale SaaS: HA shows this as "Problem" — click "Disable key expiry" in the admin). `off` when expiry is disabled or not applicable (HA shows "OK"). On Headscale, node keys do not expire by default so this stays OFF. |
 | **HA API Connected** | `on` when at least one Home Assistant API client is connected. Device class: `connectivity`. |
 | **VPN Auto-Rollback** | `on` when HA is connected via Tailscale and turning off the VPN switch would trigger the 60 s dead-man's-switch rollback. `off` when HA is on LAN — the switch can be toggled freely. |
 
@@ -558,15 +558,15 @@ Accepted forms:
 
 **One more thing to watch for:**
 
-- **Auth keys come from the coordinator that issues them.** A Tailscale SaaS `tskey-auth-...` will not work against Headscale, and vice versa. Generate the key on the same coordinator you will connect to. Headscale uses a raw hex preauth key format, not the `tskey-auth-` prefix.
+- **Auth keys come from the coordinator that issues them.** A Tailscale SaaS `tskey-auth-...` will not work against Headscale, and vice versa. Generate the key on the same coordinator you will connect to. Headscale / Headplane generates keys with a `hskey-auth-...` prefix (older CLI versions may output raw hex).
 
 For the full reproduction — docker-compose, a minimal `config.yaml`, and the CLI commands to create a user and preauth key — see [`contrib/headscale-test/README.md`](contrib/headscale-test/README.md). That directory is intentionally not shipped via the `packages:` distribution.
 
 ### Auth key and node key expiry
 
-Two settings in the Tailscale admin panel decide whether an unattended ESP stays healthy:
+Two settings in the admin panel (Tailscale Admin Console or Headplane UI) decide whether an unattended ESP stays healthy:
 
-1. **Node key expiry.** By default, each machine's key expires after 180 days. When that happens the device drops off the tailnet until re-authentication, which on a sealed ESP means a return visit with a reflash. Disable key expiry per device right after first boot: *Machines → device → ⋯ → Disable key expiry*. The `VPN Node Key Expiry Warning` binary sensor will flip off once it is done.
+1. **Node key expiry.** On **Tailscale SaaS**, each machine's key expires after 180 days by default. When that happens the device drops off the tailnet until re-authentication. Disable key expiry per device right after first boot: *Machines → device → ⋯ → Disable key expiry*. The `VPN Node Key Expiry Warning` binary sensor will flip off once it is done. On **Headscale**, node keys do not expire by default (the server sends Go's zero time as expiry). No action needed — the `VPN Node Key Expiry` sensor shows Unknown and the warning stays OFF, which is the correct steady state.
 2. **Auth key flags.** When generating the key used in `secrets.yaml`, we recommend:
    - **Pre-authorized**, so the node joins without manual approval.
    - **Non-ephemeral**, so the machine entry persists across reboots. Ephemeral nodes are wiped while offline and reappear as new entries every boot, quickly cluttering the admin panel.
@@ -581,7 +581,7 @@ Two operations invalidate this and effectively create a new machine on the tailn
 
 - **`esptool erase_flash`** wipes NVS and forces a fresh join. The old machine entry in the admin panel becomes orphaned and should be deleted manually.
 - **Changing `hostname`** in the YAML. From Tailscale's perspective this is a new node; the old entry lingers with the old name until deleted.
-- **Deleting the device in the Tailscale Admin Console.** If the auth key is **reusable and still valid**, the device will automatically re-register with the same IP — no action needed. If the auth key is **single-use or expired**, the device will fail to connect ("Connection failed" in Setup Hint). To fix this, either enter a new auth key via the **VPN Auth Key Override** entity in HA, or erase NVS (`esptool erase_flash` or ESPHome's "Clean Build Files" + reflash) and provide a fresh auth key in the YAML.
+- **Deleting the device in the admin console** (Tailscale Admin or Headplane UI / `headscale nodes delete`). If the auth key is **reusable and still valid**, the device will automatically re-register with the same IP — no action needed. If the auth key is **single-use or expired**, the device will fail to connect ("Connection failed" in Setup Hint). To fix this, either enter a new auth key via the **VPN Auth Key Override** entity in HA, or erase NVS (`esptool erase_flash` or ESPHome's "Clean Build Files" + reflash) and provide a fresh auth key in the YAML.
 
 Clean up orphans when renaming or reflashing. It is easy to accumulate ghost machines otherwise.
 
@@ -636,19 +636,19 @@ Check the serial log for the state machine output. You should cycle through `IDL
 | `IDLE` | microlink never started | WiFi not connected — check WiFi logs |
 | `WIFI_WAIT` | WiFi still joining | Wait or check SSID/password |
 | `CONNECTING` | Can't reach control plane | Check DNS and internet connectivity on the LAN |
-| `REGISTERING` | Control plane rejected the auth key | Key expired, used on too many devices, or the tailnet has device approval on — check the Tailscale admin |
+| `REGISTERING` | Control plane rejected the auth key | Key expired, used on too many devices, or the tailnet has device approval on — check the Tailscale admin (or Headplane UI / `headscale` CLI for Headscale) |
 | `ERROR` | microlink crash | See serial log for details; try `VPN Reconnect` button or reboot |
 
 ### Auth key expired
 
-Symptom: the log shows `State: ERROR` / `REGISTERING` failing after a fresh flash, the `VPN Connected` binary sensor never turns on, and the Tailscale admin shows no new machine. This usually means the pre-authentication key you baked into the firmware has expired or been revoked.
+Symptom: the log shows `State: ERROR` / `REGISTERING` failing after a fresh flash, the `VPN Connected` binary sensor never turns on, and the admin console (Tailscale or Headplane) shows no new machine. This usually means the pre-authentication key you baked into the firmware has expired or been revoked.
 
-1. Generate a new auth key (see [Quick Start step 1](#1-create-a-tailscale-auth-key)).
+1. Generate a new auth key (Tailscale: [Quick Start step 1](#1-create-a-tailscale-auth-key); Headscale: Headplane UI → "Create pre-auth key" or `headscale preauthkeys create --user <user>`).
 2. **Option A — no reflash:** paste the new key into the **VPN Auth Key Override** text entity in HA (Settings → Devices → your ESP → Controls). The device reconnects immediately with the new key, which is persisted in NVS across reboots. The **VPN Auth Key Source** sensor will show `Override (YYYY-MM-DD HH:MM)`.
 3. **Option B — reflash:** update `secrets.yaml` and re-flash (OTA if reachable, otherwise USB).
 4. **Disable key expiry on the new node** right away so it doesn't happen again. The `VPN Node Key Expiry Warning` binary sensor will flip to `off` once you do.
 
-> **Note:** The `VPN Node Key Expiry` sensor reflects the *node* key expiry (received from the Tailscale control plane), not the auth key used to register the device. Auth key expiry is never sent to the device, so it can't be monitored from HA.
+> **Note:** The `VPN Node Key Expiry` sensor reflects the *node* key expiry (received from the control plane), not the auth key used to register the device. Auth key expiry is never sent to the device, so it can't be monitored from HA. On Headscale, node keys do not expire by default — the sensor shows Unknown and the warning stays OFF, which is normal.
 
 ### HA can't reach the device after OTA
 
@@ -789,7 +789,7 @@ Yes, as long as outbound UDP and HTTPS are allowed. DERP (TCP 443) is used as a 
 The compiled firmware (including the full Tailscale stack) is around **1 MB**. A stock **4 MB** flash chip is plenty — it holds the bootloader, two OTA slots for that ~1 MB image, and still has room left for a small SPIFFS/LittleFS partition. 8 MB / 16 MB boards only matter if you plan to stack other large components next to Tailscale.
 
 **Q: Can I run multiple ESPs on the same auth key?**
-Yes, if the auth key is marked **Reusable** in the Tailscale admin. Each ESP will get its own `100.x` address.
+Yes, if the auth key is marked **Reusable** in the admin console (Tailscale Admin or Headplane UI). Each ESP will get its own `100.x` address.
 
 **Q: My tailnet has ACLs. Do I need to grant the ESP access to HA?**
 Yes, Home Assistant needs to be allowed to reach the ESP's API port (default `6053`). If you use tags, tag the ESP when generating the auth key (e.g. `tag:esphome`) and write an ACL rule allowing your HA host (or your whole tailnet) to reach `tag:esphome:*`.
