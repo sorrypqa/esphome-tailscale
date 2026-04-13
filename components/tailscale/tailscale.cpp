@@ -763,9 +763,15 @@ void TailscaleComponent::set_tailscale_enabled(bool enabled) {
   api_was_connected = api::global_api_server != nullptr && api::global_api_server->is_connected();
 #endif
   if (api_was_connected) {
-    this->enable_rollback_pending_ = true;
-    this->enable_rollback_ms_ = millis();
-    ESP_LOGI(TAG, "HA API connected — arming 60s rollback safety");
+    std::string route = this->detect_ha_route_();
+    if (route.find("Tailscale") != std::string::npos) {
+      this->enable_rollback_pending_ = true;
+      this->enable_rollback_ms_ = millis();
+      ESP_LOGI(TAG, "HA API connected via Tailscale — arming 60s rollback safety");
+    } else {
+      this->enable_rollback_pending_ = false;
+      ESP_LOGI(TAG, "HA API connected via Local — no rollback needed");
+    }
   } else {
     this->enable_rollback_pending_ = false;
     ESP_LOGI(TAG, "No HA API connection — no rollback armed");
