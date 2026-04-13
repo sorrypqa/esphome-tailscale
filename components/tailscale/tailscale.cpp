@@ -90,6 +90,12 @@ void TailscaleComponent::setup() {
     }
   }
 
+#ifdef USE_TEXT
+  if (this->auth_key_text_ != nullptr && this->auth_key_overridden_) {
+    this->auth_key_text_->publish_state("********");
+  }
+#endif
+
   ESP_LOGI(TAG, "Waiting for WiFi before starting...");
 }
 
