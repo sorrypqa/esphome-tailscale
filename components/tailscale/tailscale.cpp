@@ -719,7 +719,14 @@ void TailscaleComponent::publish_state_() {
     if (this->connected_since_ms_ > 0) {
       uptime_s = static_cast<float>((millis() - this->connected_since_ms_) / 1000);
     }
-    pub_sensor(this->uptime_sensor_, uptime_s);
+    if (this->uptime_sensor_ != nullptr) {
+      float last = this->uptime_sensor_->state;
+      float delta = std::isnan(last) ? uptime_s : (uptime_s - last);
+      float threshold = (uptime_s < 300) ? 5.0f : 60.0f;
+      if (delta >= threshold || std::isnan(last)) {
+        this->uptime_sensor_->publish_state(uptime_s);
+      }
+    }
   } else {
     float nan = NAN;
     pub_sensor(this->peers_total_sensor_, nan);
