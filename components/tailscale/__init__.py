@@ -68,6 +68,12 @@ async def to_code(config):
     add_idf_sdkconfig_option("CONFIG_MBEDTLS_POLY1305_C", True)
     add_idf_sdkconfig_option("CONFIG_MBEDTLS_HKDF_C", True)
 
+    # ESPHome defaults CONFIG_LOG_MAXIMUM_LEVEL to ERROR (1), which compiles
+    # out all ESP_LOGI/ESP_LOGW calls at the preprocessor level. Raise to INFO
+    # so the runtime debug log switch can enable microlink logs via esp_log_level_set().
+    add_idf_sdkconfig_option("CONFIG_LOG_MAXIMUM_LEVEL_ERROR", False)
+    add_idf_sdkconfig_option("CONFIG_LOG_MAXIMUM_LEVEL_INFO", True)
+
     # Enable per-tag runtime log level control (esp_log_level_set)
     # ESPHome defaults to CONFIG_LOG_TAG_LEVEL_IMPL_NONE which makes it a no-op
     add_idf_sdkconfig_option("CONFIG_LOG_TAG_LEVEL_IMPL_NONE", False)

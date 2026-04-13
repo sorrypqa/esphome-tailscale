@@ -334,6 +334,9 @@ All entities are created automatically when you include the package.
 | Entity | Description |
 | --- | --- |
 | **Tailscale Enabled** | Stops the Tailscale stack when turned off. See [Enable switch caveats](#enable-switch-caveats) below. |
+| **VPN Debug Log** | Toggles verbose microlink/VPN logging (INFO ↔ WARN). State persists across reboots via NVS. Only affects VPN-related log tags — ESPHome's own logs are unchanged. |
+
+> **Note:** The debug log switch controls the *runtime* log level of the VPN components. Your ESPHome `logger: level:` setting still acts as a global ceiling — if you set it to `ERROR`, VPN debug logs won't appear even with the switch ON. The default `DEBUG` or `INFO` level works fine.
 
 ### Buttons
 

@@ -384,9 +384,28 @@ void TailscaleComponent::publish_state_() {
     unknown_text(this->key_expiry_sensor_);
     unknown_text(this->peer_list_sensor_);
     unknown_text(this->peer_status_sensor_);
-    if (this->setup_status_sensor_ != nullptr &&
-        this->setup_status_sensor_->state != "Waiting for VPN...") {
-      this->setup_status_sensor_->publish_state("Waiting for VPN...");
+    if (this->setup_status_sensor_ != nullptr) {
+      std::string hint;
+      switch (this->current_state_) {
+        case ML_STATE_REGISTERING:
+          hint = "Registering... check auth_key if this persists";
+          break;
+        case ML_STATE_ERROR:
+          hint = "Connection error — check auth_key and network";
+          break;
+        case ML_STATE_RECONNECTING:
+          hint = "Reconnecting...";
+          break;
+        case ML_STATE_CONNECTING:
+          hint = "Connecting to control plane...";
+          break;
+        default:
+          hint = "Waiting for VPN...";
+          break;
+      }
+      if (this->setup_status_sensor_->state != hint) {
+        this->setup_status_sensor_->publish_state(hint);
+      }
     }
     this->tailnet_name_.clear();
   } else {

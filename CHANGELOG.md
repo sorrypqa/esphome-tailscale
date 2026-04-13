@@ -39,6 +39,18 @@ new empty `[Unreleased]` section added above it.
 - **`example-dev-tailscale.yaml`** and **`example-dev-headscale.yaml`** —
   separate dev configs for Tailscale SaaS and Headscale backends.
 
+### Fixed
+
+- **Microlink logs missing in package builds** — ESPHome defaults
+  `CONFIG_LOG_MAXIMUM_LEVEL` to ERROR, which compiles out all ESP_LOGI/ESP_LOGW
+  at the preprocessor level. The component now sets
+  `CONFIG_LOG_MAXIMUM_LEVEL_INFO` automatically so the debug log switch works
+  in all builds (including HA dashboard package installs), not just dev builds.
+- **State-aware VPN Setup Hint** — when disconnected, the setup hint sensor now
+  shows the current microlink state (Connecting, Registering, Reconnecting,
+  Error) instead of a generic "Waiting for VPN..." message, giving users
+  actionable feedback when auth_key is wrong or network is unreachable.
+
 ### Changed
 
 - **VPN Connect Count** — renamed from "VPN Connections" for clarity.

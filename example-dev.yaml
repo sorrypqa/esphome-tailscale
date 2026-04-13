@@ -7,12 +7,8 @@ esp32:
   framework:
     type: esp-idf
     sdkconfig_options:
-      # Unblock microlink's ESP_LOGI so [DIAG] INFO logs compile in.
-      # ESPHome defaults CONFIG_LOG_MAXIMUM_LEVEL to 1 (ERROR) — that no-ops
-      # every non-error log in ESP-IDF components at compile time.
-      CONFIG_LOG_DEFAULT_LEVEL_ERROR: n
-      CONFIG_LOG_DEFAULT_LEVEL_INFO: y
-      CONFIG_LOG_MAXIMUM_LEVEL_INFO: y
+      # CONFIG_LOG_MAXIMUM_LEVEL_INFO and CONFIG_LOG_TAG_LEVEL_IMPL are now
+      # set by the tailscale component __init__.py for all builds.
       # lwip tcpip_thread stack: ESP-IDF default 3072 is the documented minimum
       # and per Espressif's own lwip guide can overflow when callbacks log
       # verbosely ("esp_netif API calls can end up a few calls deep and
