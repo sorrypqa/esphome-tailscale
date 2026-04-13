@@ -576,7 +576,7 @@ void TailscaleComponent::publish_state_() {
     bool key_problem = expiry_enabled;
 #ifdef USE_BINARY_SENSOR
     if (this->key_expiry_warning_sensor_ != nullptr &&
-        this->key_expiry_warning_sensor_->state != key_problem) {
+        (!this->key_expiry_warning_sensor_->has_state() || this->key_expiry_warning_sensor_->state != key_problem)) {
       this->key_expiry_warning_sensor_->publish_state(key_problem);
     }
 #endif
