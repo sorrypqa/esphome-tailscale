@@ -1,8 +1,9 @@
 """Mask sensitive regions in Tailscale admin screenshots and copy them into docs/images/."""
+import os
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
-SRC = Path(r"C:/Users/devuser2/.claude/image-cache/1f178e62-4b62-47bd-bf39-dddc19fed804")
+SRC = Path(os.environ.get("SCREENSHOT_SRC", str(Path(__file__).resolve().parents[1] / "screenshots")))
 DST = Path(__file__).resolve().parents[1] / "docs" / "images"
 DST.mkdir(parents=True, exist_ok=True)
 

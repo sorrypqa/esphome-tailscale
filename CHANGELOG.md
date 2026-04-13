@@ -495,13 +495,13 @@ verified. Treat them as the honest answer to "can I rely on this for X?"
   `100.x.x.x` tailnet address (while the LAN path is unavailable) has
   been verified end-to-end.
 - **Headscale authentication, registration, and streaming long-poll.**
-  Against a local Headscale 0.23.0 instance (see `contrib/headscale-test/`
-  and the Proxmox dev LXC), the device completes the Noise IK handshake,
+  Against a local Headscale 0.23.0 instance (see `contrib/headscale-test/`),
+  the device completes the Noise IK handshake,
   registers via `/machine/register`, and the streaming `/machine/map`
   long-poll on HTTP/2 stream 5 stays open and delivers delta
   `MapResponse` chunks on every periodic endpoint update. Verified with
-  both bare-IP (`login_server: "192.168.1.157"`) and URL
-  (`login_server: "http://192.168.1.157:80"`) forms. `headscale nodes list`
+  both bare-IP (`login_server: "192.168.1.42"`) and URL
+  (`login_server: "http://192.168.1.42:80"`) forms. `headscale nodes list`
   shows the node present with IP `100.64.0.1` and online.
 
 ---
