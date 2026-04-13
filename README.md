@@ -245,6 +245,23 @@ Re-flash once more (still USB if the device is in front of you; from here on OTA
 
 > **Why this matters:** ESPHome's API and OTA clients need a single address to talk to the device. By pointing `use_address` at the Tailscale `100.x` IP, both LAN-side and remote Home Assistant instances reach the device through the tailnet — no port forwarding, no mDNS trickery, and it survives the device moving between WiFi networks.
 
+> [!TIP]
+> **Deploying to a remote site?** A typical use case is building the device at home and then moving it somewhere else — a cabin, a parent's house, a workshop. Configure multiple WiFi networks so the ESP can connect at both locations:
+>
+> ```yaml
+> wifi:
+>   networks:
+>     - ssid: "Home_WiFi"
+>       password: "home_password"
+>       priority: 2
+>     - ssid: "Remote_WiFi"
+>       password: "remote_password"
+>       priority: 1
+>   use_address: "100.xx.yy.zz"   # ← your Tailscale IP (same everywhere)
+> ```
+>
+> The `use_address` is your Tailscale `100.x` IP — it **does not change** when the device moves between WiFi networks. Set it once, deploy anywhere. Home Assistant will reach the device through the tailnet regardless of which WiFi it's connected to.
+
 ### 5. Disable key expiry on the new node
 
 By default Tailscale expires every node key after **180 days** (the tailnet-wide default; an admin can shorten it to anywhere between 1 and 180 days in **Settings → Device management → Device approval**). For an unattended ESP, you want the node key to be **permanent** — which is a per-device flag, not a tailnet setting.
