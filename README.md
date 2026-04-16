@@ -530,6 +530,8 @@ We recommend:
 
 ### Userspace WireGuard: what the node can and cannot do
 
+> **Not the same thing as the HA Tailscale add-on's "Userspace networking" checkbox.** That one is about how the HA host exposes the tailnet to other add-ons and is covered in Troubleshooting → *[ESPHome add-on can't OTA or stream logs over Tailscale (HAOS)](#esphome-add-on-cant-ota-or-stream-logs-over-tailscale-haos)*. This section is about the **ESP32 node itself** — same adjective, different layer.
+
 This component uses microlink, a userspace WireGuard stack. There is no kernel TUN device and no netfilter hook, which constrains what the Tailscale node is allowed to do compared with a full Linux `tailscaled`:
 
 | Feature                  | Supported | Notes |
@@ -714,6 +716,8 @@ This almost always means the Tailscale add-on is running in its default **usersp
 **Fix:** Go to **Settings → Add-ons → Tailscale → Configuration** and set **"Userspace networking"** to **OFF**, then restart the add-on. This moves the Tailscale interface to the host network stack, which all add-ons share. After the restart, `ping 100.x.y.z` from the HA terminal should succeed, and the ESPHome dashboard will be able to reach the device.
 
 This only affects Home Assistant OS and Supervised installs using the Tailscale add-on.
+
+**What you give up by disabling userspace mode:** very little on HAOS. The Tailscale add-on container runs with `NET_ADMIN` and adds the `100.64.0.0/10` tailnet to the host routing table — slightly more privileged, but the add-on is trusted. The tailnet also becomes visible to every other add-on instead of only to the Tailscale one. In return you gain: other add-ons can reach tailnet peers, MagicDNS resolves from the host, and exit-node / subnet-router features become available if you ever want them. Userspace mode is mainly a portability fallback for hosts that can't provide a TUN device — HAOS can, so kernel mode is the right choice here.
 
 ---
 

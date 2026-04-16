@@ -10,6 +10,22 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ## [Unreleased]
 
+### Documentation
+
+- **HAOS Tailscale add-on userspace networking prerequisite** — merged
+  [#7](https://github.com/Csontikka/esphome-tailscale/pull/7) from
+  @aviadra documenting that the Tailscale add-on must be switched out
+  of userspace networking mode so other add-ons (ESPHome etc.) can
+  reach tailnet peers. Includes a Quick Start callout, a Step 6 note
+  about updating the ESPHome integration host address after switching
+  from LAN IP to tailnet IP, and a Troubleshooting entry. Closes
+  [#6](https://github.com/Csontikka/esphome-tailscale/issues/6).
+- **Userspace networking follow-up** — added a disambiguation note
+  between the new Troubleshooting entry and the existing "Userspace
+  WireGuard" section (which is about the ESP's microlink stack, not
+  the HA add-on checkbox), plus a short trade-off note on what is
+  actually given up by disabling userspace mode on HAOS.
+
 ## [0.1.0] — 2026-04-13
 
 ### Added
