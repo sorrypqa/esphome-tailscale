@@ -281,7 +281,7 @@ void TailscaleComponent::loop() {
         microlink_peer_info_t info;
         if (microlink_get_peer_info(this->ml_, i, &info) == ESP_OK && info.online) {
           online++;
-          if (info.direct_path) direct++; else relay++;
+          if (this->peer_is_effective_direct_(info)) direct++; else relay++;
         }
       }
       if (online >= this->max_peers_) {
@@ -643,7 +643,7 @@ void TailscaleComponent::publish_state_() {
         if (dot != std::string::npos) name = name.substr(0, dot);
         char ip_str[16];
         microlink_ip_to_str(info.vpn_ip, ip_str);
-        std::string entry = name + "(" + ip_str + ")" + (info.direct_path ? "D" : "R");
+        std::string entry = name + "(" + ip_str + ")" + (this->peer_is_effective_direct_(info) ? "D" : "R");
         if (!list.empty()) list += "|";
         if (list.size() + entry.size() > 240) {
           list += "...";
