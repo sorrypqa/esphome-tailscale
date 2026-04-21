@@ -385,6 +385,7 @@ tailscale:
   hostname: "esp32-tailscale"            # optional, default empty → control plane auto-assigns
   max_peers: 16                          # optional, default 16, range 1–64
   login_server: ""                       # optional, empty → Tailscale SaaS; set for Headscale / self-hosted
+  force_derp_output: false               # optional, default false; set to true on mobile hotspot / CGNAT deployments
 ```
 
 | Option | Default | Description |
@@ -393,6 +394,7 @@ tailscale:
 | `hostname` | `""` | Name the node registers as. Empty → Tailscale picks one. |
 | `max_peers` | `16` | Maximum number of peers to track. Raise if your tailnet has more than 16 nodes *and* you have PSRAM. |
 | `login_server` | `""` | Custom control-plane host. Empty uses the official Tailscale SaaS coordinator. Set to a Headscale (or other Tailscale-compatible) coordinator to point the node elsewhere. Accepts a bare hostname, an IP, `host:port`, or a full `http://host[:port]` URL; `https://` is rejected. Authentication and initial registration work end-to-end against Headscale 0.23.0; see *Custom control plane (Headscale)* under Deployment Notes for the current caveats. Leave empty for Tailscale SaaS. |
+| `force_derp_output` | `false` | Preemptively route all outbound WireGuard traffic through the DERP relay instead of attempting direct UDP first. Useful on mobile hotspots or carrier-grade NAT where direct UDP is silently dropped. When left `false`, the component still auto-falls-back to DERP after the first failed connect — see *Direct connections versus DERP relays* under Deployment Notes. |
 
 > **No `update_interval`.** The component is fully event-driven: sensors publish only when the underlying state actually changes. There is no polling loop to tune — and nothing to reduce CPU/network cost by raising.
 
@@ -620,6 +622,15 @@ What usually prevents a direct connection:
 - **Hairpin NAT** on the local router affects whether a peer on the same LAN can reach the ESP via its tailnet IP while both are local.
 
 How to tell which mode is in use: the `HA API Connection Route` text sensor reports `Tailscale Direct` or `Tailscale DERP` for the current HA session, and the serial log emits the same classification per peer.
+
+#### Mobile hotspots and CGNAT
+
+On phone tethering or carrier-grade NAT, the coordinator still advertises each peer's direct UDP endpoint, but packets sent there are silently dropped. Two behaviors cover that case:
+
+- **Automatic self-heal (default).** The first outbound TCP connection over the VPN fails fast with an ESP-IDF socket error, the component triggers a fresh WireGuard handshake, flips outbound routing onto DERP, and retries once. The second attempt succeeds. You see roughly a 3-second one-time delay in the log; after that the tunnel behaves normally for the rest of the session.
+- **Preemptive mode (opt-in).** If you already know the device is on a hotspot or a CGNAT uplink, set `force_derp_output: true` under `tailscale:` in the YAML. The flag takes effect as soon as the WireGuard interface is built, so direct UDP is never attempted — no initial self-heal delay, straight to DERP.
+
+The preemptive flag is sticky for the life of the session. If you deploy a device that moves between a mobile hotspot and a normal WiFi, either leave `force_derp_output: false` and accept the one-time self-heal cost on hotspot, or reboot the device when switching back to a network that supports direct UDP.
 
 ### Hardware realities
 

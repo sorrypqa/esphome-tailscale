@@ -152,6 +152,14 @@ void TailscaleComponent::start_microlink_() {
   microlink_set_state_callback(this->ml_, TailscaleComponent::state_callback, this);
   microlink_set_peer_callback(this->ml_, TailscaleComponent::peer_callback, this);
 
+  // Preemptive CGNAT fallback: when configured, force all outbound WG packets
+  // through the DERP relay instead of attempting direct UDP first. The intent
+  // is sticky (applied once the WG netif comes up), so setting it here is
+  // enough — no need to wait for microlink_start.
+  if (this->force_derp_output_) {
+    microlink_force_derp_output(this->ml_, true);
+  }
+
   esp_err_t err = microlink_start(this->ml_);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "Failed to start MicroLink: %d", err);
@@ -338,6 +346,9 @@ void TailscaleComponent::dump_config() {
   ESP_LOGCONFIG(TAG, "  Max Peers: %u", this->max_peers_);
   if (!this->login_server_.empty()) {
     ESP_LOGCONFIG(TAG, "  Login Server: %s", this->login_server_.c_str());
+  }
+  if (this->force_derp_output_) {
+    ESP_LOGCONFIG(TAG, "  Force DERP Output: enabled (CGNAT fallback)");
   }
   ESP_LOGCONFIG(TAG, "  Debug Log: switch-controlled (NVS-persisted)");
 }
