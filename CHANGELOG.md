@@ -10,6 +10,8 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-04-21
+
 ### Added
 
 - **Automatic CGNAT self-heal** — merged
