@@ -10,6 +10,21 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ## [Unreleased]
 
+### Documentation
+
+- **Tailnet lock is not supported** — reported in
+  [#10](https://github.com/Csontikka/esphome-tailscale/issues/10) by
+  @TimDowker. Added a "Known limitations" section to the README that
+  spells out the gap: the upstream microlink library this component
+  wraps does not implement the client side of tailnet lock — no
+  `NodeKeySignature` field in `/machine/register`, no Ed25519 verifier
+  in the crypto stack, no NKS validation when parsing
+  `MapResponse`. Neither the "Sign machine" admin-panel flow nor the
+  pre-signed auth key flow will work for an ESP32 node joining a
+  locked tailnet. Workarounds documented: disable lock if it was
+  enabled exploratorily, run embedded devices on a separate unlocked
+  tailnet, or track the feature upstream on the microlink repo.
+
 ### Fixed
 
 - **`max_peers` YAML option silently capped at 16** — reported in

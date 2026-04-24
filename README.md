@@ -653,6 +653,22 @@ End users who pin to a released tag or a specific commit do not need any of thes
 
 ---
 
+## Known limitations
+
+### Tailnet lock
+
+**Not supported.** [Tailnet lock](https://tailscale.com/kb/1226/tailnet-lock) requires the client to embed a `NodeKeySignature` in its `/machine/register` payload when joining, and to verify Ed25519-signed peer NKS entries from each `MapResponse` before bringing up WireGuard tunnels. The upstream [microlink](https://github.com/CamM2325/microlink) library this component wraps implements neither — its registration payload has no `NodeKeySignature` field, and its crypto stack (curve25519 only) has no Ed25519 verifier linked in.
+
+If your tailnet has lock enabled, ESP32 nodes added through this component will not successfully join. The "Sign machine" flow in the admin panel and the pre-signed auth key flow both rely on the same underlying protocol features and will not help.
+
+Workarounds, roughly best → worst:
+
+1. **Disable tailnet lock in the Tailscale admin panel**, if you don't have a specific threat-model reason to keep it on. This is the simplest unblock. Note it's a one-way-ish operation — disabling invalidates your existing signing keys, and re-enabling later means re-signing every node in the tailnet from scratch.
+2. **Keep lock on your main tailnet, put ESP32 devices in a separate unlocked tailnet** and bridge between them. Preserves lock where you want it, but adds a tailnet to manage.
+3. **Wait for upstream microlink support.** If you'd like to track or push for the feature, the right place is an issue on the [microlink repo](https://github.com/CamM2325/microlink).
+
+---
+
 ## Troubleshooting
 
 ### The device won't connect at all
