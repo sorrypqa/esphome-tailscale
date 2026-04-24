@@ -10,6 +10,8 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-04-24
+
 ### Documentation
 
 - **Tailnet lock is not supported** — reported in
