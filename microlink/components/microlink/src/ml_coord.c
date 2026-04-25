@@ -1668,12 +1668,28 @@ static int do_fetch_peers(microlink_t *ml, ml_noise_state_t *noise) {
      * H2 DATA frames on stream 5 into resp_buf (the response body), and stop
      * once resp_buf has 4 + expected_len bytes. */
     uint8_t *h2_recv = ml_psram_malloc(ML_H2_BUFFER_SIZE);  /* 512KB for 300+ peer tailnets */
-    if (!h2_recv) return -1;
+    if (!h2_recv) {
+        ESP_LOGW(TAG, "do_fetch_peers: h2_recv alloc failed (wanted %u KB) — "
+                      "free heap=%u KB largest_block=%u KB. "
+                      "Internal-RAM heap is too fragmented for the MapResponse buffer.",
+                 (unsigned)(ML_H2_BUFFER_SIZE / 1024),
+                 (unsigned)(heap_caps_get_free_size(MALLOC_CAP_8BIT) / 1024),
+                 (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) / 1024));
+        return -1;
+    }
     size_t h2_total = 0;
     size_t h2_parsed = 0;  /* next unparsed byte in h2_recv */
 
     uint8_t *resp_buf = ml_psram_malloc(ML_JSON_BUFFER_SIZE);
-    if (!resp_buf) { free(h2_recv); return -1; }
+    if (!resp_buf) {
+        ESP_LOGW(TAG, "do_fetch_peers: resp_buf alloc failed (wanted %u KB) — "
+                      "free heap=%u KB largest_block=%u KB after h2_recv was allocated.",
+                 (unsigned)(ML_JSON_BUFFER_SIZE / 1024),
+                 (unsigned)(heap_caps_get_free_size(MALLOC_CAP_8BIT) / 1024),
+                 (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) / 1024));
+        free(h2_recv);
+        return -1;
+    }
     size_t json_total = 0;         /* bytes of stream-5 DATA accumulated (incl prefix) */
     uint32_t expected_body_len = 0; /* populated once we have the first 4 bytes */
 
