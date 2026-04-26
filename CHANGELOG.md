@@ -10,6 +10,8 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-04-26
+
 ### Documentation
 
 - **PSRAM detection troubleshooting** — Reported in
