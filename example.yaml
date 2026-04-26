@@ -19,18 +19,15 @@ packages:
     files:
       - packages/tailscale/tailscale.yaml
 
-# If `Device Memory` shows `Internal RAM` after flashing but your board has PSRAM,
-# uncomment the matching block below. See README → Troubleshooting → "Device Memory shows Internal RAM".
-#
-# For N8R8 / N16R8 modules (8 MB Octal PSRAM, most common):
-# psram:
-#   mode: octal
-#   speed: 80MHz
-#
-# For N8R2 / N16R2 modules (2 MB Quad PSRAM):
-# psram:
-#   mode: quad
-#   speed: 40MHz
+# PSRAM init — required by the Tailscale stack. quad/40MHz is the safe
+# default that works on every ESP32-S3 PSRAM variant:
+#   - N8R2 / N16R2 (2 MB Quad PSRAM): native speed
+#   - N8R8 / N16R8 (8 MB Octal PSRAM): runs at half bandwidth, still fast
+#     enough for the Tailscale workload — network is the bottleneck.
+# For maximum throughput on octal modules, set `mode: octal speed: 80MHz`.
+psram:
+  mode: quad
+  speed: 40MHz
 
 tailscale:
   auth_key: !secret tailscale_auth_key

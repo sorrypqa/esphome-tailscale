@@ -10,6 +10,35 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ## [Unreleased]
 
+## [0.1.4] — 2026-04-26
+
+### Changed
+
+- **PSRAM is now enabled by default in the example YAMLs.**
+  `example.yaml` and `example-dev.yaml` ship with an active `psram:`
+  block instead of leaving it commented. `example.yaml` uses
+  `mode: quad speed: 40MHz` — the safe combination that works on every
+  ESP32-S3 PSRAM variant (Quad `N8R2`/`N16R2` chips run at native
+  speed; Octal `N8R8`/`N16R8` chips run at reduced bandwidth, still
+  ample for the Tailscale workload because the network is the
+  bottleneck). `example-dev.yaml` uses `mode: octal speed: 80MHz` to
+  match the maintainer's reference hardware. This eliminates the most
+  common first-boot frustration where a PSRAM-equipped board reported
+  `Device Memory: Internal RAM` because no `psram:` block was active
+  and the board defaults didn't match the chip variant. Octal users
+  who want maximum throughput should override to
+  `mode: octal speed: 80MHz`.
+
+### Documentation
+
+- **README "Why PSRAM?" and "Memory modes" sections aligned with the
+  new default.** Both now reflect that PSRAM mode is the path users
+  land on when following the example YAML, with internal-RAM mode
+  treated as an explicit opt-out for boards without PSRAM hardware
+  or configurations where the user removed the `psram:` block. Cross
+  link to the existing Troubleshooting entry for the
+  detection-mismatch case.
+
 ## [0.1.3] — 2026-04-26
 
 ### Documentation
