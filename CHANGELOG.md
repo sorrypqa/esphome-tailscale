@@ -10,6 +10,36 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ## [Unreleased]
 
+### Documentation
+
+- **PSRAM detection troubleshooting** — Reported in
+  [#9](https://github.com/Csontikka/esphome-tailscale/issues/9) by
+  @Martian-Dylan3. When the user's board ships with quad PSRAM (e.g.
+  `N8R2` / `N16R2`) instead of the more common octal variant
+  (`N8R8` / `N16R8`), ESPHome's `psram:` component fails to initialize
+  because the `esp32-s3-devkitc-1` board defaults assume octal/80MHz.
+  The result is `Device Memory: Internal RAM` even though the board
+  has PSRAM, the MapResponse buffers fall back to 64 KB internal-RAM
+  allocations, and the VPN never connects. Documented as a
+  Troubleshooting entry in the README plus a commented `psram:` hint
+  in the example YAMLs, since we can't predict the user's hardware
+  variant from the package side.
+
+### Diagnostics
+
+- **`do_fetch_peers` failure-path logging expanded.** Previously the
+  outer `MapRequest failed, will retry` warning fired for any silent
+  `return -1` inside `do_fetch_peers`, with no way to tell which step
+  actually failed. Added WARN-level logs at the most informative exit
+  points so user reports can distinguish: `noise_send` transport
+  failure (with elapsed time since MapRequest start), `frame_buf` /
+  `h2_recv` / `resp_buf` allocation failures (with `free_heap` and
+  `largest_free_block` so the heap-fragmentation case is visible),
+  and incomplete MapResponse after the recv loop exits (with iter
+  count, last `noise_recv` return code, body bytes received vs
+  expected, and a 32-byte hex dump of the H2 buffer to identify
+  `RST_STREAM`, `GOAWAY`, etc.).
+
 ## [0.1.2] — 2026-04-24
 
 ### Documentation

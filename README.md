@@ -683,6 +683,26 @@ Check the serial log for the state machine output. You should cycle through `IDL
 | `REGISTERING` | Control plane rejected the auth key | Key expired, used on too many devices, or the tailnet has device approval on — check the Tailscale admin (or Headplane UI / `headscale` CLI for Headscale) |
 | `ERROR` | microlink crash | See serial log for details; try `VPN Reconnect` button or reboot |
 
+### `Device Memory` shows `Internal RAM` even though your board has PSRAM
+
+ESPHome's `psram:` component needs to know your specific PSRAM type and clock speed to initialize it correctly. The `esp32-s3-devkitc-1` board defaults assume **octal 80MHz** PSRAM, which matches `N8R8` / `N16R8` modules but **not** the cheaper `N8R2` / `N16R2` variants (quad 40MHz). Listings often label all of these as "WROOM-1" without making the difference clear, and an N8R2 board sold as "N16R8" is a common mismatch.
+
+If `Device Memory` reads `Internal RAM` but you believe your board has PSRAM, add an explicit `psram:` block to your YAML:
+
+```yaml
+# For N8R8 / N16R8 modules (8 MB Octal PSRAM, most common high-end variant):
+psram:
+  mode: octal
+  speed: 80MHz
+
+# For N8R2 / N16R2 modules (2 MB Quad PSRAM, cheaper variant):
+psram:
+  mode: quad
+  speed: 40MHz
+```
+
+After flashing, the `Device Memory` sensor should report `PSRAM XXkB` and the VPN should connect normally. If you don't know which variant your board is, the quad/40MHz combination works on more hardware (octal chips can run in quad mode, just at lower bandwidth) — try that first if in doubt. Reported and resolved in [#9](https://github.com/Csontikka/esphome-tailscale/issues/9).
+
 ### Auth key expired
 
 Symptom: the log shows `State: ERROR` / `REGISTERING` failing after a fresh flash, the `VPN Connected` binary sensor never turns on, and the admin console (Tailscale or Headplane) shows no new machine. This usually means the pre-authentication key you baked into the firmware has expired or been revoked.
