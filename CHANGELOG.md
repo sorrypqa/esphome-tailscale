@@ -10,6 +10,25 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ## [Unreleased]
 
+### Added
+
+- **Runtime PSRAM hint with concrete YAML config.** When the firmware
+  boots and `esp_psram_get_size()` returns 0 on an ESP32-S3, it now
+  emits a multi-line WARN log with a copy-pasteable `psram:` block for
+  both common variants (`N8R8` / `N16R8` octal/80MHz and
+  `N8R2` / `N16R2` quad/40MHz), explicitly noting that ESPHome's
+  `psram:` block forces the configured mode. Users hitting the
+  Dylan-style "PSRAM not detected even though it's there" case now
+  get the fix from the serial log alone, without needing to read the
+  Troubleshooting docs.
+- **Tailscale tag now respects the debug-log level switch.**
+  `esp_log_level_set("tailscale", level)` is now called alongside the
+  microlink (`ml_*`) tags in `apply_debug_log()`. Previously the
+  tailscale-tagged warnings (including "No PSRAM detected") were
+  silently dropped because the tag stayed at the ESP-IDF default
+  level. With this fix, WARN-level logs from this component
+  propagate at default config and INFO when the debug switch is on.
+
 ### Documentation
 
 - **Fixed misleading advice in the PSRAM troubleshooting section.** The
