@@ -661,6 +661,8 @@ End users who pin to a released tag or a specific commit do not need any of thes
 
 If your tailnet has lock enabled, ESP32 nodes added through this component will not successfully join. The "Sign machine" flow in the admin panel and the pre-signed auth key flow both rely on the same underlying protocol features and will not help.
 
+Specifically on the pre-signed auth key path (`tailscale lock sign $AUTH_KEY` → wrapped key in the form `tskey-auth-XXXXXXX--TL{...}`): the `--TL{...}` suffix is **not an opaque token**. It carries a client-side crypto payload — a `SigCredential` (a `NodeKeySignature` endorsing a single-use Ed25519 public key) plus the matching single-use Ed25519 **private** key. On first connect, a Tailscale client must unwrap the blob, Ed25519-sign its own node key with the embedded private key (a `SigRotation` signature), and emit a complete `NodeKeySignature` chain in `RegisterRequest`. Microlink today has no Ed25519 primitive (only X25519), no NKS struct, and no register-side field for it — so a longer auth-key buffer alone is not sufficient. Wire-format reference: [tailscale/tailscale#7431](https://github.com/tailscale/tailscale/pull/7431).
+
 Workarounds, roughly best → worst:
 
 1. **Disable tailnet lock in the Tailscale admin panel**, if you don't have a specific threat-model reason to keep it on. This is the simplest unblock. Note it's a one-way-ish operation — disabling invalidates your existing signing keys, and re-enabling later means re-signing every node in the tailnet from scratch.

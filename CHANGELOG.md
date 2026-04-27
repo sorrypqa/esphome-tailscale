@@ -31,6 +31,19 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ### Documentation
 
+- **Tailnet lock: pre-signed auth key path documented as not-a-shortcut.**
+  In response to
+  [#12](https://github.com/Csontikka/esphome-tailscale/issues/12) by
+  @TimDowker, the *Known limitations → Tailnet lock* section now
+  explains why the `tailscale lock sign $AUTH_KEY` (pre-signed auth
+  key) flow does not bypass the lock barrier on its own: the wrapped
+  `tskey-auth-XXXXXXX--TL{...}` form carries a client-side crypto
+  payload (a `SigCredential` + single-use Ed25519 private key) that
+  the client must unwrap and use to Ed25519-sign its own node key
+  before sending a full `NodeKeySignature` chain in `RegisterRequest`
+  — the same crypto stack microlink does not implement (no Ed25519
+  primitive, no NKS struct, no register-side field). Wire-format
+  reference: [tailscale/tailscale#7431](https://github.com/tailscale/tailscale/pull/7431).
 - **Fixed misleading advice in the PSRAM troubleshooting section.** The
   v0.1.3 entry told users "if unsure of variant, try `mode: quad
   speed: 40MHz` first because octal chips can run in quad mode at
