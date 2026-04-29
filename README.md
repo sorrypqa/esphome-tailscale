@@ -255,6 +255,15 @@ wifi:
 
 Re-flash once more (still USB if the device is in front of you; from here on OTA will work).
 
+> [!WARNING]
+> **Don't use `web.esphome.io` for repeated flashes.**
+>
+> The browser-based flasher erases the entire flash on every write, which wipes the NVS partition where the Tailscale identity (`machine_key` + WireGuard keypair + disco keypair) lives. Result: every re-flash registers as a brand-new node, gets a new `100.x` IP, and the `use_address` you just pinned points at the old (now orphaned) node. Use one of these instead — they preserve NVS across flashes:
+>
+> - **ESPHome add-on** in Home Assistant (the dashboard's USB / OTA buttons)
+> - **ESPHome CLI** (`pip install esphome` → `esphome run config.yaml`)
+> - **OTA** after this first successful pin — the dashboard/CLI auto-selects OTA once `use_address` resolves, so re-flashes go over Tailscale and never touch NVS
+
 > **Why this matters:** ESPHome's API and OTA clients need a single address to talk to the device. By pointing `use_address` at the Tailscale `100.x` IP, both LAN-side and remote Home Assistant instances reach the device through the tailnet — no port forwarding, no mDNS trickery, and it survives the device moving between WiFi networks.
 
 > [!TIP]

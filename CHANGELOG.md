@@ -31,6 +31,18 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ### Documentation
 
+- **Step #4 warning: don't use `web.esphome.io` for repeated flashes.**
+  In response to
+  [#13](https://github.com/Csontikka/esphome-tailscale/issues/13) by
+  @TimDowker, the README now warns at the `use_address` pinning step
+  that the browser-based ESPHome flasher erases the full flash on
+  every write, which wipes the NVS partition where the Tailscale
+  identity (machine_key + WireGuard keypair + disco keypair) lives.
+  Each re-flash with `web.esphome.io` therefore registers as a
+  brand-new node and gets a new `100.x` IP, breaking the just-pinned
+  `use_address`. Recommended alternatives that preserve NVS: the
+  ESPHome HA add-on, the ESPHome CLI (`esphome run`), or OTA from
+  the dashboard once the first pinning has succeeded.
 - **Tailnet lock: pre-signed auth key path documented as not-a-shortcut.**
   In response to
   [#12](https://github.com/Csontikka/esphome-tailscale/issues/12) by
