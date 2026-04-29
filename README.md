@@ -58,12 +58,13 @@ The traditional answer is **subnet routers**: put a Tailscale node on the remote
 - An **ESP32** board with **PSRAM** (recommended: 8 MB Octal PSRAM).
 - **At least 4 MB flash** — enough for the bootloader plus two OTA slots of the ~1 MB firmware. 8 MB or more is only useful if you want to stack other large ESPHome components next to Tailscale.
 
-> **Current testing target:** active development and flashing is being done on **ESP32-S3**. Other ESP32 variants (classic ESP32, ESP32-C3, ESP32-C6, ESP32-P4, …) may work through the upstream [microlink](https://github.com/CamM2325/microlink) library, but they are **not yet verified** by this project. If you get the component running on a non-S3 chip, please open an issue / PR so we can list it here.
+> **Current testing target:** active development and flashing is being done on **ESP32-S3**. Other ESP32 variants (classic ESP32, ESP32-C3, ESP32-C6, ESP32-P4, …) may work through the upstream [microlink](https://github.com/CamM2325/microlink) library, but most are **not yet verified** by this project. If you get the component running on a non-S3 chip, please open an issue / PR so we can list it here.
 
 Boards currently verified:
 
 - **ESP32-S3-DevKitC-1** (8 MB PSRAM, 16 MB flash) — the reference / test board
 - **ESP32-S3-N16R8**
+- **AI-Thinker ESP32-CAM** (classic ESP32, 8 MB PSRAM revision) — community-confirmed in [#15](https://github.com/Csontikka/esphome-tailscale/issues/15) by @gastonc. Use `psram: mode: quad speed: 80MHz` (classic ESP32 has no octal PSRAM). Verified to run alongside the ESPHome `esp32_camera` component on the same device with 4 peers online over a direct Tailscale route — RAM and task scheduling fit comfortably with PSRAM enabled.
 
 > **Why PSRAM?** The Tailscale control protocol and WireGuard crypto state together need more RAM than a plain ESP32 has. Without PSRAM the component falls back to small buffers and caps around 30 peers — fine for small tailnets, rough for larger ones.
 

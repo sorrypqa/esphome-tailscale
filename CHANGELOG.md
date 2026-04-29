@@ -31,6 +31,16 @@ once a `1.0.0` release is cut. While the version is still in the `0.x` range,
 
 ### Documentation
 
+- **Hardware compatibility: AI-Thinker ESP32-CAM added to verified
+  boards.** Community-confirmed in
+  [#15](https://github.com/Csontikka/esphome-tailscale/issues/15) by
+  @gastonc on the 8 MB PSRAM revision of the AI-Thinker ESP32-CAM
+  with `psram: mode: quad speed: 80MHz` (classic ESP32 has no octal
+  PSRAM). Verified to run alongside the ESPHome `esp32_camera`
+  component on the same device with 4 peers online over a direct
+  Tailscale route — first non-S3 board with a confirmed-working
+  setup, demonstrating RAM and task-scheduling headroom is sufficient
+  on classic ESP32 once PSRAM is enabled.
 - **Step #4 warning: don't use `web.esphome.io` for repeated flashes.**
   In response to
   [#13](https://github.com/Csontikka/esphome-tailscale/issues/13) by
