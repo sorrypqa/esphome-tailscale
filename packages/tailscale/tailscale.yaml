@@ -11,7 +11,7 @@ logger:
 external_components:
   - source:
       type: git
-      url: https://github.com/Csontikka/esphome-tailscale.git
+      url: https://github.com/sorrypqa/esphome-tailscale.git
       ref: main
     components: [tailscale]
     refresh: 0s
