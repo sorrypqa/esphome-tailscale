@@ -28,10 +28,13 @@ binary_sensor:
   - platform: tailscale
     connected:
       name: "VPN Connected"
+      icon: mdi:check-network-outline
     key_expiry_warning:
       name: "VPN Node Key Expiry Warning"
+      internal: true
     ha_connected:
       name: "HA API Connected"
+      icon: mdi:check-underline-circle
     vpn_auto_rollback:
       name: "VPN Auto-Rollback"
 
@@ -39,30 +42,43 @@ text_sensor:
   - platform: tailscale
     ip_address:
       name: "VPN IP"
+      icon: mdi:ip
     vpn_hostname:
       name: "VPN Hostname"
+      icon: mdi:rename-box-outline
     memory_mode:
       name: "Device Memory"
+      icon: mdi:memory
     setup_status:
       name: "VPN Setup Hint"
+      internal: true
     peer_status:
       name: "VPN Peer Status"
+      icon: mdi:clipboard-pulse-outline
     magicdns:
       name: "VPN MagicDNS"
+      icon: mdi:dns-outline
     network_name:
       name: "VPN Network"
+      icon: mdi:table-network
     key_expiry:
       name: "VPN Node Key Expiry"
+      icon: mdi:calendar-text
     ha_connection_route:
       name: "HA API Connection Route"
+      icon: mdi:router
     ha_connection_ip:
       name: "HA API Connection IP"
+      icon: mdi:ip-outline
     control_plane:
       name: "VPN Control Plane"
+      icon: mdi:microsoft-xbox-controller-view
     login_server:
       name: "VPN Login Server"
+      icon: mdi:login-variant
     auth_key_status:
       name: "VPN Auth Key Source"
+      icon: mdi:shield-key-outline
 
 text:
   - platform: tailscale
@@ -81,16 +97,22 @@ sensor:
   - platform: tailscale
     peers_online:
       name: "VPN Peers Online"
+      icon: "mdi:account-network" 
     peers_direct:
       name: "VPN Peers Direct"
+      icon: "mdi:arrow-decision"  
     peers_derp:
       name: "VPN Peers DERP"
+      icon: "mdi:server-network" 
     peers_max:
       name: "VPN Peers Max"
+      icon: "mdi:account-multiple"  
     uptime:
       name: "VPN Uptime"
+      icon: mdi:clock-start
     connections:
       name: "VPN Connect Count"
+      icon: "mdi:counter"   
 
 switch:
   - platform: tailscale
