@@ -90,8 +90,8 @@ button:
   - platform: tailscale
     reconnect:
       name: "VPN Reconnect"
-  - platform: restart
-    name: "Reboot"
+#  - platform: restart
+#    name: "Reboot"
 
 sensor:
   - platform: tailscale
